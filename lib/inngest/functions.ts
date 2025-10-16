@@ -5,6 +5,8 @@ import { researchLead } from '@/lib/ai/researcher';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { logProgress } from '@/lib/utils/progress-logger';
 import { findBusinessWebsite } from '@/lib/scrapers/google-search';
+import { searchCity } from '@/lib/services/city-search';
+import { getSuburbConfig, supportsSuburbSearch } from '@/lib/config/suburbs';
 
 // ============================================
 // Main Lead Research Workflow
@@ -40,7 +42,7 @@ export const processLeadRun = inngest.createFunction(
       });
     });
 
-    // Step 2: Scrape Google Maps for businesses
+    // Step 2: Scrape Google Maps for businesses (with suburb support)
     const businesses = await step.run('scrape-google-maps', async () => {
       await logProgress({
         runId,
@@ -49,11 +51,52 @@ export const processLeadRun = inngest.createFunction(
         message: `Searching Google Maps for ${businessType} businesses in ${location}`,
       });
 
-      const results = await scrapeGoogleMaps({
-        query: businessType,
-        location: location,
-        limit: targetCount
-      });
+      let results;
+
+      // Check if location supports multi-suburb search
+      const suburbConfig = getSuburbConfig(location);
+
+      if (suburbConfig) {
+        // Use city-search service for supported cities
+        console.log(`[Process Run] Using multi-suburb search for ${location}`);
+
+        await logProgress({
+          runId,
+          userId,
+          eventType: 'scraping_started',
+          message: `Using multi-suburb search across ${suburbConfig.suburbs.length} suburbs in ${location}`,
+          details: { suburbCount: suburbConfig.suburbs.length }
+        });
+
+        const searchResults = await searchCity({
+          query: businessType,
+          config: suburbConfig,
+          limit: targetCount,
+          perSuburbLimit: 20,
+          mode: 'hybrid' // City-wide + suburbs for best coverage
+        });
+
+        // Convert to GoogleMapsResult format
+        results = searchResults.map(result => ({
+          name: result.name,
+          address: result.address,
+          phone: result.phone,
+          website: result.website,
+          latitude: result.latitude,
+          longitude: result.longitude,
+          url: result.latitude && result.longitude
+            ? `https://www.google.com/maps/search/?api=1&query=${result.latitude},${result.longitude}`
+            : undefined
+        }));
+      } else {
+        // Fall back to regular single-location search
+        console.log(`[Process Run] Using single-location search for ${location}`);
+        results = await scrapeGoogleMaps({
+          query: businessType,
+          location: location,
+          limit: targetCount
+        });
+      }
 
       await logProgress({
         runId,
@@ -78,6 +121,8 @@ export const processLeadRun = inngest.createFunction(
         phone: business.phone,
         website: business.website,
         google_maps_url: business.url,
+        latitude: business.latitude,
+        longitude: business.longitude,
         research_status: 'pending'
       }));
 
@@ -99,45 +144,31 @@ export const processLeadRun = inngest.createFunction(
       return data;
     });
 
-    // Step 4: Update run status to researching
-    await step.run('update-run-status-researching', async () => {
+    // Step 4: Mark run as ready for research (NOT auto-triggering research)
+    await step.run('update-run-status-ready', async () => {
       const supabase = createAdminClient();
-      await supabase
-        .from('runs')
-        .update({ status: 'researching' })
-        .eq('id', runId);
 
-      await logProgress({
-        runId,
-        userId,
-        eventType: 'status_update',
-        message: 'Starting AI-powered lead research',
-      });
-    });
-
-    // Step 5: Process each lead individually
-    const leads = await step.run('fetch-leads', async () => {
-      const supabase = createAdminClient();
-      const { data } = await supabase
+      const { count: leadsCount } = await supabase
         .from('leads')
-        .select('id')
+        .select('id', { count: 'exact', head: true })
         .eq('run_id', runId);
-      return data || [];
-    });
 
-    // Step 6: Fan out to individual lead processing
-    if (leads.length > 0) {
-      await step.sendEvent('trigger-lead-processing', leads.map(lead => ({
-        name: 'lead/research.triggered',
-        data: {
-          leadId: lead.id,
-          runId: runId
-        }
-      })));
-    } else {
-      // No leads to process - mark run as completed
-      await step.run('mark-run-completed-no-leads', async () => {
-        const supabase = createAdminClient();
+      if (leadsCount && leadsCount > 0) {
+        // Scraping complete, ready for manual research trigger
+        await supabase
+          .from('runs')
+          .update({ status: 'ready' })
+          .eq('id', runId);
+
+        await logProgress({
+          runId,
+          userId,
+          eventType: 'scraping_completed',
+          message: `Scraping complete! Found ${leadsCount} businesses. Ready to research.`,
+          details: { leadsFound: leadsCount }
+        });
+      } else {
+        // No leads found - mark as completed
         await supabase
           .from('runs')
           .update({
@@ -153,13 +184,13 @@ export const processLeadRun = inngest.createFunction(
           message: 'Run completed with no businesses found',
           details: { reason: 'no-results-from-scraper' }
         });
-      });
-    }
+      }
+    });
 
     return {
       success: true,
       businessesFound: businesses.length,
-      leadsCreated: leads.length
+      status: 'ready' // Ready for manual research trigger
     };
   }
 );
@@ -241,17 +272,18 @@ export const researchIndividualLead = inngest.createFunction(
       });
     }
 
-    // Step 2: If still no website after search, mark as failed
+    // Step 2: If still no website after search, mark as completed with F grade
     if (!websiteUrl) {
       await step.run('mark-no-website', async () => {
         const supabase = createAdminClient();
         await supabase
           .from('leads')
           .update({
-            research_status: 'failed',
+            research_status: 'completed',
             error_message: 'No website found via Google Maps or Google Search',
             compatibility_grade: 'F',
-            grade_reasoning: 'Cannot assess without website presence'
+            grade_reasoning: 'Cannot assess compatibility without an online presence. Business lacks a discoverable website.',
+            researched_at: new Date().toISOString()
           })
           .eq('id', leadId);
 
@@ -265,9 +297,9 @@ export const researchIndividualLead = inngest.createFunction(
           await logProgress({
             runId,
             userId: run.user_id,
-            eventType: 'lead_failed',
-            message: `${lead.name} - No website found after Google search`,
-            details: { leadName: lead.name, reason: 'no-website' }
+            eventType: 'lead_research_completed',
+            message: `Completed research for ${lead.name} - Grade: F`,
+            details: { leadName: lead.name, grade: 'F', reason: 'no-website' }
           });
         }
       });
@@ -315,7 +347,12 @@ export const researchIndividualLead = inngest.createFunction(
           about_content: websiteData.aboutContent,
           team_content: websiteData.teamContent,
           has_multiple_locations: websiteData.hasMultipleLocations,
-          team_size: websiteData.teamSize
+          team_size: websiteData.teamSize,
+          abn: websiteData.abn,
+          abn_entity_name: websiteData.abnData?.entityName,
+          abn_status: websiteData.abnData?.abnStatus,
+          abn_registered_date: websiteData.abnData?.abnStatusEffectiveFrom,
+          business_age_years: websiteData.abnData?.businessAge
         })
         .eq('id', leadId);
     });
@@ -421,8 +458,75 @@ export const researchIndividualLead = inngest.createFunction(
   }
 );
 
+// ============================================
+// Trigger Research for All Leads in a Run
+// ============================================
+// Manual trigger to start research for all leads in a run
+export const triggerResearchAll = inngest.createFunction(
+  {
+    id: 'trigger-research-all',
+    name: 'Trigger Research for All Leads',
+    retries: 1,
+  },
+  { event: 'lead/research-all.triggered' },
+  async ({ event, step }) => {
+    const { runId } = event.data;
+
+    // Step 1: Update run status to researching
+    await step.run('update-run-status-researching', async () => {
+      const supabase = createAdminClient();
+      await supabase
+        .from('runs')
+        .update({ status: 'researching' })
+        .eq('id', runId);
+
+      const { data: run } = await supabase
+        .from('runs')
+        .select('user_id')
+        .eq('id', runId)
+        .single();
+
+      if (run) {
+        await logProgress({
+          runId,
+          userId: run.user_id,
+          eventType: 'status_update',
+          message: 'Starting AI-powered research for all leads...',
+        });
+      }
+    });
+
+    // Step 2: Fetch all pending leads
+    const leads = await step.run('fetch-pending-leads', async () => {
+      const supabase = createAdminClient();
+      const { data } = await supabase
+        .from('leads')
+        .select('id')
+        .eq('run_id', runId)
+        .eq('research_status', 'pending');
+      return data || [];
+    });
+
+    // Step 3: Fan out to individual lead processing
+    if (leads.length > 0) {
+      await step.sendEvent('trigger-lead-research', leads.map(lead => ({
+        name: 'lead/research.triggered',
+        data: {
+          leadId: lead.id,
+          runId: runId
+        }
+      })));
+
+      return { success: true, leadsTriggered: leads.length };
+    } else {
+      return { success: false, reason: 'no-pending-leads', leadsTriggered: 0 };
+    }
+  }
+);
+
 // Export all functions
 export const functions = [
   processLeadRun,
-  researchIndividualLead
+  researchIndividualLead,
+  triggerResearchAll
 ];

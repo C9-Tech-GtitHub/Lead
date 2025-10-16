@@ -82,6 +82,25 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
             <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
               Location
             </label>
+
+            {/* Quick Select Buttons for Test Cities */}
+            <div className="mb-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setLocation('Sydney')}
+                className="px-3 py-1 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
+              >
+                🏙️ Sydney
+              </button>
+              <button
+                type="button"
+                onClick={() => setLocation('Melbourne')}
+                className="px-3 py-1 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
+              >
+                🏙️ Melbourne
+              </button>
+            </div>
+
             <input
               id="location"
               type="text"
@@ -89,9 +108,11 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              placeholder="e.g., Melbourne, Australia"
+              placeholder="e.g., Melbourne, Sydney, Brisbane"
             />
-            <p className="mt-1 text-xs text-gray-500">City or region to search in</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Use Sydney or Melbourne for multi-suburb search
+            </p>
           </div>
 
           <div>

@@ -29,6 +29,40 @@ interface RunsListProps {
 
 export function RunsList({ initialRuns }: RunsListProps) {
   const [runs, setRuns] = useState<Run[]>(initialRuns);
+  const [researchingRuns, setResearchingRuns] = useState<Set<string>>(new Set());
+
+  const handleResearchAll = async (runId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation
+
+    if (!confirm('Start researching all pending leads in this run?')) {
+      return;
+    }
+
+    setResearchingRuns(prev => new Set(prev).add(runId));
+
+    try {
+      const response = await fetch('/api/inngest/trigger-research-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger research');
+      }
+
+      // Status will update via realtime subscription
+    } catch (error) {
+      console.error('Error triggering research all:', error);
+      alert('Failed to start research. Please try again.');
+    } finally {
+      setResearchingRuns(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(runId);
+        return newSet;
+      });
+    }
+  };
 
   const handleDeleteRun = async (runId: string, e: React.MouseEvent) => {
     e.preventDefault(); // Prevent navigation
@@ -115,6 +149,19 @@ export function RunsList({ initialRuns }: RunsListProps) {
             </Link>
             <div className="flex items-center gap-2">
               <StatusBadge status={run.status} />
+
+              {/* Research All Button - show when status is "ready" */}
+              {run.status === 'ready' && (
+                <button
+                  onClick={(e) => handleResearchAll(run.id, e)}
+                  disabled={researchingRuns.has(run.id)}
+                  className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  title="Research all pending leads"
+                >
+                  {researchingRuns.has(run.id) ? 'Starting...' : '🔬 Research All'}
+                </button>
+              )}
+
               <button
                 onClick={(e) => handleDeleteRun(run.id, e)}
                 className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded transition-colors"
@@ -180,6 +227,7 @@ function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: 'bg-gray-100 text-gray-700',
     scraping: 'bg-blue-100 text-blue-700',
+    ready: 'bg-yellow-100 text-yellow-700',
     researching: 'bg-purple-100 text-purple-700',
     completed: 'bg-green-100 text-green-700',
     failed: 'bg-red-100 text-red-700',

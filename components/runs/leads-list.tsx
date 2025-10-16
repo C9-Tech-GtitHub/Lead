@@ -31,6 +31,67 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [filterGrade, setFilterGrade] = useState<string>('all');
+  const [researchingLeads, setResearchingLeads] = useState<Set<string>>(new Set());
+
+  const handleResearchLead = async (leadId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+
+    setResearchingLeads(prev => new Set(prev).add(leadId));
+
+    try {
+      const response = await fetch('/api/inngest/trigger-research-single', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, runId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger research');
+      }
+
+      // Status will update via realtime subscription
+    } catch (error) {
+      console.error('Error triggering research:', error);
+      alert('Failed to start research. Please try again.');
+      setResearchingLeads(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(leadId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleReResearchLead = async (leadId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+
+    if (!confirm('Re-research this lead? This will re-scrape the website and update all data including ABN lookup.')) {
+      return;
+    }
+
+    setResearchingLeads(prev => new Set(prev).add(leadId));
+
+    try {
+      const response = await fetch('/api/inngest/trigger-re-research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leadId, runId })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger re-research');
+      }
+
+      // Status will update via realtime subscription
+    } catch (error) {
+      console.error('Error triggering re-research:', error);
+      alert('Failed to start re-research. Please try again.');
+      setResearchingLeads(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(leadId);
+        return newSet;
+      });
+    }
+  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -166,8 +227,31 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
               )}
             </div>
 
-            <div className="mt-3">
+            <div className="mt-3 flex items-center justify-between">
               <ResearchStatusBadge status={lead.research_status} />
+
+              {/* Individual Research Button */}
+              {lead.research_status === 'pending' && (
+                <button
+                  onClick={(e) => handleResearchLead(lead.id, e)}
+                  disabled={researchingLeads.has(lead.id)}
+                  className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {researchingLeads.has(lead.id) ? 'Starting...' : 'Research'}
+                </button>
+              )}
+
+              {/* Re-Research Button for Completed/Failed */}
+              {(lead.research_status === 'completed' || lead.research_status === 'failed') && (
+                <button
+                  onClick={(e) => handleReResearchLead(lead.id, e)}
+                  disabled={researchingLeads.has(lead.id)}
+                  className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  title="Re-scrape website and update all data"
+                >
+                  {researchingLeads.has(lead.id) ? 'Re-researching...' : '🔄 Re-research'}
+                </button>
+              )}
             </div>
 
             {lead.error_message && (

@@ -9,6 +9,8 @@ interface GoogleMapsResult {
   phone?: string;
   website?: string;
   url?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 interface ScrapeGoogleMapsParams {
@@ -84,6 +86,8 @@ export async function scrapeGoogleMaps({
           address: result.address || undefined,
           phone: result.phone || undefined,
           website: result.website || undefined,
+          latitude: result.gps_coordinates?.latitude || undefined,
+          longitude: result.gps_coordinates?.longitude || undefined,
           url: result.gps_coordinates
             ? `https://www.google.com/maps/search/?api=1&query=${result.gps_coordinates.latitude},${result.gps_coordinates.longitude}`
             : undefined

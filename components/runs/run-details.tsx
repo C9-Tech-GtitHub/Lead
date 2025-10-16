@@ -30,6 +30,30 @@ interface RunDetailsProps {
 
 export function RunDetails({ run: initialRun }: RunDetailsProps) {
   const [run, setRun] = useState<Run>(initialRun);
+  const [isResearchingAll, setIsResearchingAll] = useState(false);
+
+  const handleResearchAll = async () => {
+    setIsResearchingAll(true);
+
+    try {
+      const response = await fetch('/api/inngest/trigger-research-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: run.id })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger research');
+      }
+
+      // The run status will update via realtime subscription
+    } catch (error) {
+      console.error('Error triggering research:', error);
+      alert('Failed to start research. Please try again.');
+    } finally {
+      setIsResearchingAll(false);
+    }
+  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -83,8 +107,19 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
           </span>
         </div>
 
-        <div className="mb-3">
+        <div className="mb-3 flex items-center gap-3">
           <StatusBadge status={run.status} />
+
+          {/* Research All Button - show when status is "ready" */}
+          {run.status === 'ready' && (
+            <button
+              onClick={handleResearchAll}
+              disabled={isResearchingAll}
+              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+            >
+              {isResearchingAll ? 'Starting...' : '🔬 Research All Leads'}
+            </button>
+          )}
         </div>
 
         {run.status !== 'failed' && run.status !== 'completed' && (
@@ -183,6 +218,7 @@ function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: 'bg-gray-100 text-gray-700',
     scraping: 'bg-blue-100 text-blue-700',
+    ready: 'bg-yellow-100 text-yellow-700',
     researching: 'bg-purple-100 text-purple-700',
     completed: 'bg-green-100 text-green-700',
     failed: 'bg-red-100 text-red-700',

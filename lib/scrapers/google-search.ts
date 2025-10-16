@@ -11,7 +11,7 @@ interface GoogleSearchResult {
 }
 
 interface GoogleSearchResponse {
-  organic_data: GoogleSearchResult[];
+  organic_results: GoogleSearchResult[];
 }
 
 /**
@@ -28,10 +28,17 @@ export async function findBusinessWebsite(
   }
 
   try {
-    console.log(`[Google Search] Searching for: ${businessName} ${location}`);
+    // Extract just the city name from location (remove street address)
+    // Example: "405 Smith St,Fitzroy VIC 3065,Australia" -> "Fitzroy"
+    const cityMatch = location.match(/([A-Za-z\s]+)(?:\s+(?:VIC|NSW|QLD|SA|WA|TAS|NT|ACT))?/);
+    const city = cityMatch ? cityMatch[1].trim() : location.split(',')[0].trim();
+
+    // Simple query: business name + city + website
+    const searchQuery = `${businessName} ${city} website`;
+    console.log(`[Google Search] Searching for: ${searchQuery}`);
 
     // Construct search query
-    const query = encodeURIComponent(`${businessName} ${location}`);
+    const query = encodeURIComponent(searchQuery);
 
     // Build API URL with parameters
     const url = `https://api.scrapingdog.com/google/?api_key=${apiKey}&query=${query}&results=5&country=au`;
@@ -46,7 +53,7 @@ export async function findBusinessWebsite(
 
     const data: GoogleSearchResponse = await response.json();
 
-    if (!data.organic_data || data.organic_data.length === 0) {
+    if (!data.organic_results || data.organic_results.length === 0) {
       console.log(`[Google Search] No results found for ${businessName}`);
       return null;
     }
@@ -69,7 +76,12 @@ export async function findBusinessWebsite(
       'hotfrog.com.au'
     ];
 
-    for (const result of data.organic_data) {
+    // Extract the core business name (remove common suffixes like location names)
+    const coreBusinessName = businessName
+      .replace(/\s+(Collingwood|Fitzroy|Melbourne|Sydney|Brisbane|Perth|Adelaide|CBD|Store|Shop)$/i, '')
+      .trim();
+
+    for (const result of data.organic_results) {
       // Skip directory/listing sites
       const isDirectory = directoryDomains.some(domain =>
         result.link.toLowerCase().includes(domain)
@@ -77,8 +89,15 @@ export async function findBusinessWebsite(
 
       if (!isDirectory) {
         // Check if the business name appears in the title or link
-        const nameInTitle = result.title.toLowerCase().includes(businessName.toLowerCase());
-        const nameInLink = result.displayed_link.toLowerCase().includes(businessName.toLowerCase().replace(/\s+/g, ''));
+        const titleLower = result.title.toLowerCase();
+        const linkLower = result.displayed_link.toLowerCase();
+        const businessLower = businessName.toLowerCase();
+        const coreNameLower = coreBusinessName.toLowerCase();
+
+        // Check for matches with both full name and core name
+        const nameInTitle = titleLower.includes(businessLower) || titleLower.includes(coreNameLower);
+        const nameInLink = linkLower.includes(businessLower.replace(/\s+/g, '')) ||
+                          linkLower.includes(coreNameLower.replace(/\s+/g, ''));
 
         if (nameInTitle || nameInLink) {
           console.log(`[Google Search] Found potential website: ${result.link}`);
@@ -88,7 +107,7 @@ export async function findBusinessWebsite(
     }
 
     // If no exact match, return the first non-directory result
-    const firstNonDirectory = data.organic_data.find(result =>
+    const firstNonDirectory = data.organic_results.find(result =>
       !directoryDomains.some(domain => result.link.toLowerCase().includes(domain))
     );
 

@@ -117,6 +117,8 @@ CREATE TABLE IF NOT EXISTS leads (
   phone TEXT,
   website TEXT,
   google_maps_url TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
 
   -- Business size indicators
   has_multiple_locations BOOLEAN DEFAULT FALSE,
