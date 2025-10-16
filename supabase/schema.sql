@@ -215,7 +215,7 @@ BEGIN
       SELECT COUNT(*) FROM leads WHERE run_id = NEW.run_id AND compatibility_grade = 'F'
     ),
     progress = LEAST(100, ROUND(
-      (SELECT COUNT(*) FROM leads WHERE run_id = NEW.run_id AND research_status = 'completed')::NUMERIC /
+      (SELECT COUNT(*) FROM leads WHERE run_id = NEW.run_id AND research_status IN ('completed', 'failed'))::NUMERIC /
       (SELECT target_count FROM runs WHERE id = NEW.run_id)::NUMERIC * 100
     ))
   WHERE id = NEW.run_id;

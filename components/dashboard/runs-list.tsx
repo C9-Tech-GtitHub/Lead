@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
+import { formatDateAU } from '@/lib/utils/format-date';
 
 interface Run {
   id: string;
@@ -28,6 +29,30 @@ interface RunsListProps {
 
 export function RunsList({ initialRuns }: RunsListProps) {
   const [runs, setRuns] = useState<Run[]>(initialRuns);
+
+  const handleDeleteRun = async (runId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation
+
+    if (!confirm('Are you sure you want to delete this run? This will also delete all associated leads.')) {
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('runs')
+        .delete()
+        .eq('id', runId);
+
+      if (error) throw error;
+
+      // Update local state immediately
+      setRuns((current) => current.filter((run) => run.id !== runId));
+    } catch (error) {
+      console.error('Error deleting run:', error);
+      alert('Failed to delete run');
+    }
+  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -75,66 +100,77 @@ export function RunsList({ initialRuns }: RunsListProps) {
   return (
     <div className="space-y-4">
       {runs.map((run) => (
-        <Link
+        <div
           key={run.id}
-          href={`/dashboard/runs/${run.id}`}
-          className="block bg-white rounded-lg shadow hover:shadow-md transition-shadow p-6"
+          className="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-6"
         >
           <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
+            <Link href={`/dashboard/runs/${run.id}`} className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600">
                 {run.business_type} in {run.location}
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                Target: {run.target_count} leads • Created{' '}
-                {new Date(run.created_at).toLocaleDateString()}
+                Target: {run.target_count} leads • Created {formatDateAU(run.created_at)}
               </p>
+            </Link>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={run.status} />
+              <button
+                onClick={(e) => handleDeleteRun(run.id, e)}
+                className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded transition-colors"
+                title="Delete run"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </button>
             </div>
-            <StatusBadge status={run.status} />
           </div>
 
-          {/* Progress Bar */}
-          {run.status !== 'failed' && (
-            <div className="mb-4">
-              <div className="flex justify-between text-sm text-gray-600 mb-1">
-                <span>Progress</span>
-                <span>{run.progress}%</span>
+          <Link href={`/dashboard/runs/${run.id}`} className="block">
+            {/* Progress Bar */}
+            {run.status !== 'failed' && (
+              <div className="mb-4">
+                <div className="flex justify-between text-sm text-gray-600 mb-1">
+                  <span>Progress</span>
+                  <span>{run.progress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${run.progress}%` }}
+                  />
+                </div>
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${run.progress}%` }}
-                />
-              </div>
-            </div>
-          )}
+            )}
 
-          {/* Grade Distribution */}
-          {run.total_leads > 0 && (
-            <div className="flex gap-4 text-sm">
-              <div className="flex items-center gap-1">
-                <span className="text-green-600 font-semibold">A:</span>
-                <span>{run.grade_a_count}</span>
+            {/* Grade Distribution */}
+            {run.total_leads > 0 && (
+              <div className="flex gap-4 text-sm">
+                <div className="flex items-center gap-1">
+                  <span className="text-green-600 font-semibold">A:</span>
+                  <span>{run.grade_a_count}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-blue-600 font-semibold">B:</span>
+                  <span>{run.grade_b_count}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-yellow-600 font-semibold">C:</span>
+                  <span>{run.grade_c_count}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-orange-600 font-semibold">D:</span>
+                  <span>{run.grade_d_count}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-red-600 font-semibold">F:</span>
+                  <span>{run.grade_f_count}</span>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <span className="text-blue-600 font-semibold">B:</span>
-                <span>{run.grade_b_count}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-yellow-600 font-semibold">C:</span>
-                <span>{run.grade_c_count}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-orange-600 font-semibold">D:</span>
-                <span>{run.grade_d_count}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-red-600 font-semibold">F:</span>
-                <span>{run.grade_f_count}</span>
-              </div>
-            </div>
-          )}
-        </Link>
+            )}
+          </Link>
+        </div>
       ))}
     </div>
   );

@@ -6,10 +6,11 @@ import { LeadsList } from '@/components/runs/leads-list';
 import Link from 'next/link';
 
 interface RunPageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export default async function RunPage({ params }: RunPageProps) {
+  const { id } = await params;
   const supabase = await createClient();
 
   // Check if user is authenticated
@@ -25,7 +26,7 @@ export default async function RunPage({ params }: RunPageProps) {
   const { data: run } = await supabase
     .from('runs')
     .select('*')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('user_id', user.id)
     .single();
 
@@ -37,7 +38,7 @@ export default async function RunPage({ params }: RunPageProps) {
   const { data: leads } = await supabase
     .from('leads')
     .select('*')
-    .eq('run_id', params.id)
+    .eq('run_id', id)
     .order('compatibility_grade', { ascending: true })
     .order('created_at', { ascending: false });
 
@@ -60,7 +61,7 @@ export default async function RunPage({ params }: RunPageProps) {
 
           <div className="mt-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4">Leads</h2>
-            <LeadsList initialLeads={leads || []} runId={params.id} />
+            <LeadsList initialLeads={leads || []} runId={id} />
           </div>
         </div>
       </main>

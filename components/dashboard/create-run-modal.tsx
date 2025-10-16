@@ -2,15 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
-import { inngest } from '@/lib/inngest/client';
+import { createRun } from '@/lib/actions/create-run';
 
 interface CreateRunModalProps {
   onClose: () => void;
 }
 
 export function CreateRunModal({ onClose }: CreateRunModalProps) {
-  const [businessType, setBusinessType] = useState('');
+  const [businessType, setBusinessType] = useState('Camping & Hiking Gear');
   const [location, setLocation] = useState('');
   const [targetCount, setTargetCount] = useState(10);
   const [loading, setLoading] = useState(false);
@@ -23,49 +22,18 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
     setError(null);
 
     try {
-      const supabase = createClient();
-
-      // Get current user
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user) throw new Error('Not authenticated');
-
-      // Create the run in the database
-      const { data: run, error: createError } = await supabase
-        .from('runs')
-        .insert({
-          user_id: user.id,
-          business_type: businessType,
-          location: location,
-          target_count: targetCount,
-          status: 'pending',
-        })
-        .select()
-        .single();
-
-      if (createError) throw createError;
-
-      // Trigger the Inngest workflow
-      await fetch('/api/inngest', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: 'lead/run.created',
-          data: {
-            runId: run.id,
-            userId: user.id,
-            businessType,
-            location,
-            targetCount,
-          },
-        }),
+      // Call the server action to create run and trigger Inngest workflow
+      await createRun({
+        businessType,
+        location,
+        targetCount,
       });
 
-      // Close modal and refresh
+      // Close modal - real-time subscription will handle the update
       onClose();
-      router.refresh();
+
+      // Force a page refresh to ensure the new run appears
+      window.location.href = '/dashboard';
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create run');
     } finally {
@@ -104,7 +72,7 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               required
               value={businessType}
               onChange={(e) => setBusinessType(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               placeholder="e.g., realtors, dentists, law firms"
             />
             <p className="mt-1 text-xs text-gray-500">What type of business are you searching for?</p>
@@ -120,7 +88,7 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               required
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               placeholder="e.g., Melbourne, Australia"
             />
             <p className="mt-1 text-xs text-gray-500">City or region to search in</p>
@@ -138,7 +106,7 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               max={50}
               value={targetCount}
               onChange={(e) => setTargetCount(parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             />
             <p className="mt-1 text-xs text-gray-500">Between 5 and 50 leads</p>
           </div>

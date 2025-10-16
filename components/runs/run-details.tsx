@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { ProgressLog } from './progress-log';
+import { formatDateAU } from '@/lib/utils/format-date';
 
 interface Run {
   id: string;
@@ -56,16 +58,10 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {run.business_type} in {run.location}
-          </h1>
-          <p className="text-gray-500 mt-1">
-            Created {new Date(run.created_at).toLocaleString()}
-          </p>
-        </div>
-        <StatusBadge status={run.status} />
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">
+          {run.business_type} in {run.location}
+        </h1>
       </div>
 
       {run.error_message && (
@@ -75,23 +71,48 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
         </div>
       )}
 
-      {/* Progress */}
-      {run.status !== 'failed' && run.status !== 'completed' && (
-        <div className="mb-6">
-          <div className="flex justify-between text-sm text-gray-600 mb-2">
-            <span>Processing Leads</span>
-            <span>
-              {run.total_leads} / {run.target_count} ({run.progress}%)
-            </span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-3">
-            <div
-              className="bg-blue-600 h-3 rounded-full transition-all duration-500"
-              style={{ width: `${run.progress}%` }}
-            />
-          </div>
+      {/* Progress Tracking */}
+      <div className="mb-6 bg-gray-50 rounded-lg p-4">
+        <div className="mb-2">
+          <span className="text-sm font-medium text-gray-700">
+            Target: {run.target_count} leads
+          </span>
+          <span className="text-sm text-gray-500 mx-2">•</span>
+          <span className="text-sm text-gray-500">
+            Created {formatDateAU(run.created_at)}
+          </span>
         </div>
-      )}
+
+        <div className="mb-3">
+          <StatusBadge status={run.status} />
+        </div>
+
+        {run.status !== 'failed' && run.status !== 'completed' && (
+          <>
+            <div className="mb-2">
+              <div className="flex justify-between text-sm text-gray-600 mb-1">
+                <span className="font-medium">Progress</span>
+                <span className="font-medium">{run.progress}%</span>
+              </div>
+              <div className="w-full bg-gray-300 rounded-full h-3">
+                <div
+                  className="bg-blue-600 h-3 rounded-full transition-all duration-500"
+                  style={{ width: `${run.progress}%` }}
+                />
+              </div>
+            </div>
+            <div className="text-xs text-gray-500 mt-2">
+              {run.total_leads} of {run.target_count} leads processed
+            </div>
+          </>
+        )}
+
+        {run.status === 'completed' && (
+          <div className="text-sm text-green-600 font-medium">
+            Completed {run.completed_at ? formatDateAU(run.completed_at) : ''}
+          </div>
+        )}
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
@@ -149,6 +170,11 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
           </div>
         </div>
       )}
+
+      {/* Progress Log */}
+      <div className="mt-6">
+        <ProgressLog runId={run.id} />
+      </div>
     </div>
   );
 }
