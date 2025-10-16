@@ -14,48 +14,83 @@ export async function createRun({
   location,
   targetCount,
 }: CreateRunParams) {
-  const supabase = await createClient();
+  try {
+    const supabase = await createClient();
 
-  const sanitizedTargetCount = Math.max(
-    5,
-    Math.min(200, Number.isFinite(targetCount) ? targetCount : 5),
-  );
+    const sanitizedTargetCount = Math.max(
+      5,
+      Math.min(2000, Number.isFinite(targetCount) ? targetCount : 5),
+    );
 
-  // Get current user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    // Get current user
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    throw new Error("Not authenticated");
-  }
+    if (!user) {
+      throw new Error("Not authenticated");
+    }
 
-  // Create the run in the database
-  const { data: run, error: createError } = await supabase
-    .from("runs")
-    .insert({
-      user_id: user.id,
-      business_type: businessType,
-      location: location,
-      target_count: sanitizedTargetCount,
-      status: "pending",
-    })
-    .select()
-    .single();
-
-  if (createError) throw createError;
-
-  // Trigger the Inngest workflow using inngest.send()
-  await inngest.send({
-    name: "lead/run.created",
-    data: {
-      runId: run.id,
-      userId: user.id,
+    console.log("[createRun] Creating run for user:", user.id, {
       businessType,
       location,
       targetCount: sanitizedTargetCount,
-    },
-  });
+    });
 
-  return { runId: run.id };
+    // Create the run in the database
+    const { data: run, error: createError } = await supabase
+      .from("runs")
+      .insert({
+        user_id: user.id,
+        business_type: businessType,
+        location: location,
+        target_count: sanitizedTargetCount,
+        status: "pending",
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      console.error("[createRun] Database error:", createError);
+      throw new Error(`Database error: ${createError.message}`);
+    }
+
+    if (!run) {
+      throw new Error("Failed to create run - no data returned");
+    }
+
+    console.log("[createRun] Run created successfully:", run.id);
+
+    // Trigger the Inngest workflow using inngest.send()
+    try {
+      const eventResult = await inngest.send({
+        name: "lead/run.created",
+        data: {
+          runId: run.id,
+          userId: user.id,
+          businessType,
+          location,
+          targetCount: sanitizedTargetCount,
+        },
+      });
+      console.log("[createRun] Inngest event sent:", eventResult);
+    } catch (inngestError) {
+      console.error("[createRun] Inngest error:", inngestError);
+      // Don't throw - the run is created, Inngest will retry
+      // But update the run status to show there's an issue
+      await supabase
+        .from("runs")
+        .update({
+          status: "failed",
+          error_message: `Failed to trigger workflow: ${inngestError instanceof Error ? inngestError.message : "Unknown error"}`,
+        })
+        .eq("id", run.id);
+      throw new Error("Failed to start research workflow. Please try again.");
+    }
+
+    return { runId: run.id };
+  } catch (error) {
+    console.error("[createRun] Error:", error);
+    throw error;
+  }
 }

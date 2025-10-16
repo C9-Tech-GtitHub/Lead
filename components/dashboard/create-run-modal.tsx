@@ -11,7 +11,7 @@ interface CreateRunModalProps {
 export function CreateRunModal({ onClose }: CreateRunModalProps) {
   const [businessType, setBusinessType] = useState("Camping & Hiking Gear");
   const [location, setLocation] = useState("");
-  const [targetCount, setTargetCount] = useState(25);
+  const [targetCount, setTargetCount] = useState(100);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -35,7 +35,12 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
       // Force a page refresh to ensure the new run appears
       window.location.href = "/dashboard";
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create run");
+      console.error("Failed to create run:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to start research. Please try again.",
+      );
     } finally {
       setLoading(false);
     }
@@ -135,13 +140,13 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               type="number"
               required
               min={5}
-              max={200}
-              step={5}
+              max={2000}
+              step={10}
               value={targetCount}
               onChange={(e) => {
                 const value = parseInt(e.target.value, 10);
                 if (!Number.isNaN(value)) {
-                  setTargetCount(Math.max(5, Math.min(200, value)));
+                  setTargetCount(Math.max(5, Math.min(2000, value)));
                 } else {
                   setTargetCount(5);
                 }
@@ -149,8 +154,8 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Between 5 and 200 leads — use higher counts for major cities like
-              Sydney or Melbourne.
+              Between 5 and 2000 leads — use the upper range for major metros
+              when the multi-suburb search is enabled.
             </p>
           </div>
 

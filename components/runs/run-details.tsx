@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { ProgressLog } from './progress-log';
-import { formatDateAU } from '@/lib/utils/format-date';
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { ProgressLog } from "./progress-log";
+import { formatDateAU } from "@/lib/utils/format-date";
 
 interface Run {
   id: string;
@@ -31,25 +31,49 @@ interface RunDetailsProps {
 export function RunDetails({ run: initialRun }: RunDetailsProps) {
   const [run, setRun] = useState<Run>(initialRun);
   const [isResearchingAll, setIsResearchingAll] = useState(false);
+  const [isPrescreening, setIsPrescreening] = useState(false);
+
+  const handlePrescreen = async () => {
+    setIsPrescreening(true);
+
+    try {
+      const response = await fetch("/api/inngest/trigger-prescreen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId: run.id }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to trigger prescreen");
+      }
+
+      // The run status will update via realtime subscription
+    } catch (error) {
+      console.error("Error triggering prescreen:", error);
+      alert("Failed to start prescreen. Please try again.");
+    } finally {
+      setIsPrescreening(false);
+    }
+  };
 
   const handleResearchAll = async () => {
     setIsResearchingAll(true);
 
     try {
-      const response = await fetch('/api/inngest/trigger-research-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId: run.id })
+      const response = await fetch("/api/inngest/trigger-research-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId: run.id }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to trigger research');
+        throw new Error("Failed to trigger research");
       }
 
       // The run status will update via realtime subscription
     } catch (error) {
-      console.error('Error triggering research:', error);
-      alert('Failed to start research. Please try again.');
+      console.error("Error triggering research:", error);
+      alert("Failed to start research. Please try again.");
     } finally {
       setIsResearchingAll(false);
     }
@@ -62,16 +86,16 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
     const channel = supabase
       .channel(`run-${initialRun.id}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'runs',
+          event: "UPDATE",
+          schema: "public",
+          table: "runs",
           filter: `id=eq.${initialRun.id}`,
         },
         (payload) => {
           setRun(payload.new as Run);
-        }
+        },
       )
       .subscribe();
 
@@ -110,19 +134,28 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
         <div className="mb-3 flex items-center gap-3">
           <StatusBadge status={run.status} />
 
-          {/* Research All Button - show when status is "ready" */}
-          {run.status === 'ready' && (
-            <button
-              onClick={handleResearchAll}
-              disabled={isResearchingAll}
-              className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-sm transition-colors"
-            >
-              {isResearchingAll ? 'Starting...' : '🔬 Research All Leads'}
-            </button>
+          {/* Prescreen and Research buttons - show when status is "ready" */}
+          {run.status === "ready" && (
+            <>
+              <button
+                onClick={handlePrescreen}
+                disabled={isPrescreening}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+              >
+                {isPrescreening ? "Prescreening..." : "🔍 Prescreen Leads"}
+              </button>
+              <button
+                onClick={handleResearchAll}
+                disabled={isResearchingAll}
+                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+              >
+                {isResearchingAll ? "Starting..." : "🔬 Research All Leads"}
+              </button>
+            </>
           )}
         </div>
 
-        {run.status !== 'failed' && run.status !== 'completed' && (
+        {run.status !== "failed" && run.status !== "completed" && (
           <>
             <div className="mb-2">
               <div className="flex justify-between text-sm text-gray-600 mb-1">
@@ -142,9 +175,9 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
           </>
         )}
 
-        {run.status === 'completed' && (
+        {run.status === "completed" && (
           <div className="text-sm text-green-600 font-medium">
-            Completed {run.completed_at ? formatDateAU(run.completed_at) : ''}
+            Completed {run.completed_at ? formatDateAU(run.completed_at) : ""}
           </div>
         )}
       </div>
@@ -216,12 +249,17 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: 'bg-gray-100 text-gray-700',
-    scraping: 'bg-blue-100 text-blue-700',
-    ready: 'bg-yellow-100 text-yellow-700',
-    researching: 'bg-purple-100 text-purple-700',
-    completed: 'bg-green-100 text-green-700',
-    failed: 'bg-red-100 text-red-700',
+    pending: "bg-gray-100 text-gray-700",
+    scraping: "bg-blue-100 text-blue-700",
+    prescreening: "bg-blue-100 text-blue-700",
+    ready: "bg-yellow-100 text-yellow-700",
+    researching: "bg-purple-100 text-purple-700",
+    completed: "bg-green-100 text-green-700",
+    failed: "bg-red-100 text-red-700",
+  };
+
+  const labels: Record<string, string> = {
+    prescreening: "Prescreening",
   };
 
   return (
@@ -230,7 +268,7 @@ function StatusBadge({ status }: { status: string }) {
         styles[status] || styles.pending
       }`}
     >
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {labels[status] || status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
 }
@@ -238,7 +276,7 @@ function StatusBadge({ status }: { status: string }) {
 function StatCard({
   label,
   value,
-  color = 'text-gray-900',
+  color = "text-gray-900",
 }: {
   label: string;
   value: number;

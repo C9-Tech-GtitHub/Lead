@@ -60,7 +60,7 @@ export async function searchCity({
       const cityResults = await scrapeGoogleMaps({
         query,
         location: `${config.city}, ${config.state}`,
-        limit: mode === "city-wide" ? limit : Math.min(limit, 80), // Get up to 80 for hybrid
+        limit: mode === "city-wide" ? limit : Math.min(limit, 200), // Allow deeper pre-pass for hybrid
       });
 
       // Add city-wide results

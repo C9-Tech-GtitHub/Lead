@@ -2,6 +2,7 @@ import { inngest } from "./client";
 import { scrapeGoogleMaps } from "@/lib/scrapers/google-maps";
 import { scrapeWebsite } from "@/lib/scrapers/website";
 import { researchLead } from "@/lib/ai/researcher";
+import { prescreenLeadsBatch } from "@/lib/ai/prescreen";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logProgress } from "@/lib/utils/progress-logger";
 import { findBusinessWebsite } from "@/lib/scrapers/google-search";
@@ -67,7 +68,17 @@ export const processLeadRun = inngest.createFunction(
         console.log(`[Process Run] Using multi-suburb search for ${location}`);
 
         const perSuburbLimit =
-          targetCount >= 150 ? 40 : targetCount >= 100 ? 30 : 20;
+          targetCount >= 1500
+            ? 80
+            : targetCount >= 800
+              ? 60
+              : targetCount >= 300
+                ? 45
+                : targetCount >= 150
+                  ? 40
+                  : targetCount >= 100
+                    ? 30
+                    : 20;
 
         await logProgress({
           runId,
@@ -160,14 +171,100 @@ export const processLeadRun = inngest.createFunction(
       return data;
     });
 
-    // Step 4: Mark run as ready for research (NOT auto-triggering research)
+    // Step 4: Prescreen leads to identify franchises
+    const prescreenResults = await step.run("prescreen-leads", async () => {
+      const supabase = createAdminClient();
+
+      await logProgress({
+        runId,
+        userId,
+        eventType: "prescreening_started",
+        message: `Pre-screening ${businesses.length} businesses to identify franchises...`,
+      });
+
+      // Get all leads for this run
+      const { data: allLeads } = await supabase
+        .from("leads")
+        .select("id, name, address, website")
+        .eq("run_id", runId);
+
+      if (!allLeads || allLeads.length === 0) {
+        return { skipped: 0, toResearch: 0 };
+      }
+
+      // Prescreen in batches
+      const prescreenParams = allLeads.map((lead) => ({
+        name: lead.name,
+        address: lead.address || undefined,
+        website: lead.website || undefined,
+        businessType: businessType,
+      }));
+
+      const results = await prescreenLeadsBatch(prescreenParams, 10);
+
+      let skippedCount = 0;
+      let toResearchCount = 0;
+
+      // Update leads with prescreen results
+      for (const lead of allLeads) {
+        const result = results.get(lead.name);
+        if (!result) continue;
+
+        if (result.shouldResearch) {
+          toResearchCount++;
+          await supabase
+            .from("leads")
+            .update({
+              prescreened: true,
+              prescreen_result: "research",
+              prescreen_reason: result.reason,
+              is_franchise: result.isFranchise,
+              is_national_brand: result.isNationalBrand,
+              prescreen_confidence: result.confidence,
+              prescreened_at: new Date().toISOString(),
+            })
+            .eq("id", lead.id);
+        } else {
+          skippedCount++;
+          await supabase
+            .from("leads")
+            .update({
+              prescreened: true,
+              prescreen_result: "skip",
+              prescreen_reason: result.reason,
+              is_franchise: result.isFranchise,
+              is_national_brand: result.isNationalBrand,
+              prescreen_confidence: result.confidence,
+              research_status: "skipped",
+              compatibility_grade: "F",
+              grade_reasoning: `Skipped - ${result.reason}`,
+              prescreened_at: new Date().toISOString(),
+              researched_at: new Date().toISOString(),
+            })
+            .eq("id", lead.id);
+        }
+      }
+
+      await logProgress({
+        runId,
+        userId,
+        eventType: "prescreening_completed",
+        message: `Pre-screening complete: ${toResearchCount} leads to research, ${skippedCount} franchises skipped`,
+        details: { toResearch: toResearchCount, skipped: skippedCount },
+      });
+
+      return { skipped: skippedCount, toResearch: toResearchCount };
+    });
+
+    // Step 5: Mark run as ready for research (NOT auto-triggering research)
     await step.run("update-run-status-ready", async () => {
       const supabase = createAdminClient();
 
       const { count: leadsCount } = await supabase
         .from("leads")
         .select("id", { count: "exact", head: true })
-        .eq("run_id", runId);
+        .eq("run_id", runId)
+        .eq("prescreen_result", "research");
 
       if (leadsCount && leadsCount > 0) {
         // Scraping complete, ready for manual research trigger
@@ -177,11 +274,14 @@ export const processLeadRun = inngest.createFunction(
           runId,
           userId,
           eventType: "scraping_completed",
-          message: `Scraping complete! Found ${leadsCount} businesses. Ready to research.`,
-          details: { leadsFound: leadsCount },
+          message: `Ready to research ${leadsCount} businesses (${prescreenResults.skipped} franchises excluded)`,
+          details: {
+            leadsToResearch: leadsCount,
+            franchisesSkipped: prescreenResults.skipped,
+          },
         });
       } else {
-        // No leads found - mark as completed
+        // No leads to research - mark as completed
         await supabase
           .from("runs")
           .update({
@@ -194,8 +294,8 @@ export const processLeadRun = inngest.createFunction(
           runId,
           userId,
           eventType: "run_completed",
-          message: "Run completed with no businesses found",
-          details: { reason: "no-results-from-scraper" },
+          message: `Run completed - all ${prescreenResults.skipped} businesses were franchises`,
+          details: { reason: "all-franchises" },
         });
       }
     });
@@ -203,6 +303,8 @@ export const processLeadRun = inngest.createFunction(
     return {
       success: true,
       businessesFound: businesses.length,
+      franchisesSkipped: prescreenResults.skipped,
+      leadsToResearch: prescreenResults.toResearch,
       status: "ready", // Ready for manual research trigger
     };
   },
@@ -493,14 +595,15 @@ export const triggerResearchAll = inngest.createFunction(
       }
     });
 
-    // Step 2: Fetch all pending leads
+    // Step 2: Fetch all pending leads (excluding prescreened franchises)
     const leads = await step.run("fetch-pending-leads", async () => {
       const supabase = createAdminClient();
       const { data } = await supabase
         .from("leads")
         .select("id")
         .eq("run_id", runId)
-        .eq("research_status", "pending");
+        .eq("research_status", "pending")
+        .neq("prescreen_result", "skip"); // Exclude franchises
       return data || [];
     });
 
@@ -524,9 +627,201 @@ export const triggerResearchAll = inngest.createFunction(
   },
 );
 
+// ============================================
+// Manual Prescreen Trigger
+// ============================================
+// Allows manual triggering of prescreen for existing leads
+export const triggerPrescreen = inngest.createFunction(
+  {
+    id: "trigger-prescreen",
+    name: "Trigger Manual Prescreen",
+    retries: 1,
+  },
+  { event: "lead/prescreen.triggered" },
+  async ({ event, step }) => {
+    const { runId, businessType } = event.data;
+
+    // Step 1: Update run status to prescreening
+    await step.run("update-run-status-prescreening", async () => {
+      const supabase = createAdminClient();
+      await supabase
+        .from("runs")
+        .update({ status: "scraping" }) // Use 'scraping' to show activity
+        .eq("id", runId);
+
+      const { data: run } = await supabase
+        .from("runs")
+        .select("user_id")
+        .eq("id", runId)
+        .single();
+
+      if (run) {
+        await logProgress({
+          runId,
+          userId: run.user_id,
+          eventType: "status_update",
+          message: "Starting prescreening to identify franchises...",
+        });
+      }
+    });
+
+    // Step 2: Fetch leads that haven't been prescreened
+    const leads = await step.run("fetch-leads-to-prescreen", async () => {
+      const supabase = createAdminClient();
+      const { data } = await supabase
+        .from("leads")
+        .select("id, name, address, website")
+        .eq("run_id", runId)
+        .or("prescreened.is.null,prescreened.eq.false");
+      return data || [];
+    });
+
+    if (leads.length === 0) {
+      await step.run("no-leads-to-prescreen", async () => {
+        const supabase = createAdminClient();
+        await supabase.from("runs").update({ status: "ready" }).eq("id", runId);
+
+        const { data: run } = await supabase
+          .from("runs")
+          .select("user_id")
+          .eq("id", runId)
+          .single();
+
+        if (run) {
+          await logProgress({
+            runId,
+            userId: run.user_id,
+            eventType: "status_update",
+            message: "All leads already prescreened",
+          });
+        }
+      });
+
+      return { success: false, reason: "no-leads-to-prescreen" };
+    }
+
+    // Step 3: Run prescreen
+    const prescreenResults = await step.run("prescreen-leads", async () => {
+      const supabase = createAdminClient();
+
+      const { data: run } = await supabase
+        .from("runs")
+        .select("user_id")
+        .eq("id", runId)
+        .single();
+
+      if (!run) {
+        throw new Error("Run not found");
+      }
+
+      await logProgress({
+        runId,
+        userId: run.user_id,
+        eventType: "prescreening_started",
+        message: `Pre-screening ${leads.length} businesses to identify franchises...`,
+      });
+
+      // Prescreen in batches
+      const prescreenParams = leads.map((lead) => ({
+        name: lead.name,
+        address: lead.address || undefined,
+        website: lead.website || undefined,
+        businessType: businessType,
+      }));
+
+      const results = await prescreenLeadsBatch(prescreenParams, 10);
+
+      let skippedCount = 0;
+      let toResearchCount = 0;
+
+      // Update leads with prescreen results
+      for (const lead of leads) {
+        const result = results.get(lead.name);
+        if (!result) continue;
+
+        if (result.shouldResearch) {
+          toResearchCount++;
+          await supabase
+            .from("leads")
+            .update({
+              prescreened: true,
+              prescreen_result: "research",
+              prescreen_reason: result.reason,
+              is_franchise: result.isFranchise,
+              is_national_brand: result.isNationalBrand,
+              prescreen_confidence: result.confidence,
+              prescreened_at: new Date().toISOString(),
+            })
+            .eq("id", lead.id);
+        } else {
+          skippedCount++;
+          await supabase
+            .from("leads")
+            .update({
+              prescreened: true,
+              prescreen_result: "skip",
+              prescreen_reason: result.reason,
+              is_franchise: result.isFranchise,
+              is_national_brand: result.isNationalBrand,
+              prescreen_confidence: result.confidence,
+              research_status: "skipped",
+              compatibility_grade: "F",
+              grade_reasoning: `Skipped - ${result.reason}`,
+              prescreened_at: new Date().toISOString(),
+              researched_at: new Date().toISOString(),
+            })
+            .eq("id", lead.id);
+        }
+      }
+
+      await logProgress({
+        runId,
+        userId: run.user_id,
+        eventType: "prescreening_completed",
+        message: `Pre-screening complete: ${toResearchCount} leads to research, ${skippedCount} franchises skipped`,
+        details: { toResearch: toResearchCount, skipped: skippedCount },
+      });
+
+      return { skipped: skippedCount, toResearch: toResearchCount };
+    });
+
+    // Step 4: Update run status back to ready
+    await step.run("update-run-status-ready", async () => {
+      const supabase = createAdminClient();
+      await supabase.from("runs").update({ status: "ready" }).eq("id", runId);
+
+      const { data: run } = await supabase
+        .from("runs")
+        .select("user_id")
+        .eq("id", runId)
+        .single();
+
+      if (run) {
+        await logProgress({
+          runId,
+          userId: run.user_id,
+          eventType: "prescreening_completed",
+          message: `Ready to research ${prescreenResults.toResearch} businesses (${prescreenResults.skipped} franchises excluded)`,
+          details: {
+            leadsToResearch: prescreenResults.toResearch,
+            franchisesSkipped: prescreenResults.skipped,
+          },
+        });
+      }
+    });
+
+    return {
+      success: true,
+      franchisesSkipped: prescreenResults.skipped,
+      leadsToResearch: prescreenResults.toResearch,
+    };
+  },
+);
+
 // Export all functions
 export const functions = [
   processLeadRun,
   researchIndividualLead,
   triggerResearchAll,
+  triggerPrescreen,
 ];
