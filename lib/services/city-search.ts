@@ -3,7 +3,7 @@
  * Handles multi-suburb searches with duplicate detection
  */
 
-import { scrapeGoogleMaps } from '@/lib/scrapers/google-maps';
+import { scrapeGoogleMaps } from "@/lib/scrapers/google-maps";
 
 export interface SearchResult {
   place_id: string;
@@ -28,7 +28,7 @@ export interface CitySearchOptions {
   config: SuburbSearchConfig;
   limit: number; // Total limit across all suburbs
   perSuburbLimit?: number; // Max results per suburb (default: 20)
-  mode: 'city-wide' | 'suburbs' | 'hybrid';
+  mode: "city-wide" | "suburbs" | "hybrid";
 }
 
 /**
@@ -40,24 +40,27 @@ export async function searchCity({
   config,
   limit,
   perSuburbLimit = 20,
-  mode = 'hybrid'
+  mode = "hybrid",
 }: CitySearchOptions): Promise<SearchResult[]> {
-
   const seenPlaceIds = new Set<string>();
   const results: SearchResult[] = [];
 
-  console.log(`[City Search] Starting ${mode} search for "${query}" in ${config.city}, ${config.state}`);
-  console.log(`[City Search] Target limit: ${limit}, Per suburb limit: ${perSuburbLimit}`);
+  console.log(
+    `[City Search] Starting ${mode} search for "${query}" in ${config.city}, ${config.state}`,
+  );
+  console.log(
+    `[City Search] Target limit: ${limit}, Per suburb limit: ${perSuburbLimit}`,
+  );
 
   // Mode 1: City-wide search first (if hybrid or city-wide mode)
-  if (mode === 'city-wide' || mode === 'hybrid') {
+  if (mode === "city-wide" || mode === "hybrid") {
     console.log(`[City Search] Performing city-wide search for ${config.city}`);
 
     try {
       const cityResults = await scrapeGoogleMaps({
         query,
         location: `${config.city}, ${config.state}`,
-        limit: mode === 'city-wide' ? limit : Math.min(limit, 40) // Get up to 40 for hybrid
+        limit: mode === "city-wide" ? limit : Math.min(limit, 80), // Get up to 80 for hybrid
       });
 
       // Add city-wide results
@@ -74,29 +77,33 @@ export async function searchCity({
             website: result.website,
             latitude: result.latitude,
             longitude: result.longitude,
-            suburb: config.city // Mark as city-wide result
+            suburb: config.city, // Mark as city-wide result
           });
         }
       }
 
-      console.log(`[City Search] City-wide search found ${results.length} unique businesses`);
+      console.log(
+        `[City Search] City-wide search found ${results.length} unique businesses`,
+      );
 
       // If we hit the limit in city-wide mode, return early
-      if (mode === 'city-wide' || results.length >= limit) {
+      if (mode === "city-wide" || results.length >= limit) {
         return results.slice(0, limit);
       }
     } catch (error) {
-      console.error('[City Search] City-wide search failed:', error);
+      console.error("[City Search] City-wide search failed:", error);
       // Continue to suburb searches if city-wide fails
     }
   }
 
   // Mode 2: Suburb-by-suburb search
-  if (mode === 'suburbs' || mode === 'hybrid') {
+  if (mode === "suburbs" || mode === "hybrid") {
     const remainingLimit = limit - results.length;
 
     if (remainingLimit <= 0) {
-      console.log('[City Search] Limit reached from city-wide search, skipping suburb searches');
+      console.log(
+        "[City Search] Limit reached from city-wide search, skipping suburb searches",
+      );
       return results;
     }
 
@@ -105,7 +112,9 @@ export async function searchCity({
     for (const suburb of config.suburbs) {
       // Stop if we've hit the overall limit
       if (results.length >= limit) {
-        console.log('[City Search] Overall limit reached, stopping suburb searches');
+        console.log(
+          "[City Search] Overall limit reached, stopping suburb searches",
+        );
         break;
       }
 
@@ -115,7 +124,7 @@ export async function searchCity({
         const suburbResults = await scrapeGoogleMaps({
           query,
           location: `${suburb}, ${config.city}, ${config.state}`,
-          limit: perSuburbLimit
+          limit: perSuburbLimit,
         });
 
         let suburbNewCount = 0;
@@ -143,17 +152,18 @@ export async function searchCity({
             website: result.website,
             latitude: result.latitude,
             longitude: result.longitude,
-            suburb: suburb
+            suburb: suburb,
           });
         }
 
-        console.log(`[City Search] ${suburb}: Found ${suburbNewCount} new businesses (${suburbResults.length} total, ${suburbResults.length - suburbNewCount} duplicates)`);
+        console.log(
+          `[City Search] ${suburb}: Found ${suburbNewCount} new businesses (${suburbResults.length} total, ${suburbResults.length - suburbNewCount} duplicates)`,
+        );
 
         // Small delay to avoid rate limiting
         if (config.suburbs.indexOf(suburb) < config.suburbs.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
-
       } catch (error) {
         console.error(`[City Search] Failed to search ${suburb}:`, error);
         // Continue with next suburb
@@ -161,8 +171,12 @@ export async function searchCity({
     }
   }
 
-  console.log(`[City Search] Complete! Found ${results.length} unique businesses across all locations`);
-  console.log(`[City Search] Duplicates filtered: ${seenPlaceIds.size - results.length}`);
+  console.log(
+    `[City Search] Complete! Found ${results.length} unique businesses across all locations`,
+  );
+  console.log(
+    `[City Search] Duplicates filtered: ${seenPlaceIds.size - results.length}`,
+  );
 
   return results.slice(0, limit);
 }
@@ -179,7 +193,7 @@ function extractPlaceId(result: any): string | null {
   if (result.data_id) return result.data_id;
 
   // Try extracting from URL if present
-  if (result.url && result.url.includes('maps')) {
+  if (result.url && result.url.includes("maps")) {
     const match = result.url.match(/place_id=([^&]+)/);
     if (match) return match[1];
   }

@@ -1,10 +1,10 @@
 /**
  * AI Lead Researcher
- * Uses GPT-5 mini for intelligent lead analysis and grading
+ * Uses GPT-5 for intelligent lead analysis and grading with web search
  * Following best practices from GPT5-BEST-PRACTICES.md
  */
 
-import OpenAI from 'openai';
+import OpenAI from "openai";
 
 interface ResearchLeadParams {
   name: string;
@@ -19,176 +19,198 @@ interface ResearchLeadParams {
 
 interface LeadAnalysis {
   report: string;
-  grade: 'A' | 'B' | 'C' | 'D' | 'F';
+  grade: "A" | "B" | "C" | "D" | "F";
   gradeReasoning: string;
-  suggestedHooks: string[];
-  painPoints: string[];
-  opportunities: string[];
+  matchCheck?: string;
+  identityLegitimacy?: string;
+  businessProfile?: string;
+  scaleActivity?: string;
+  brandPresence?: string;
+  businessHistory?: string;
+  businessSize?: string;
+  marketReach?: string;
+  snapshot?: string;
+  suggestedHooks?: string[] | null;
+  painPoints?: string[] | null;
+  opportunities?: string[] | null;
 }
 
 // Initialize OpenAI client
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function researchLead(params: ResearchLeadParams): Promise<LeadAnalysis> {
+export async function researchLead(
+  params: ResearchLeadParams,
+): Promise<LeadAnalysis> {
   try {
     console.log(`[AI Researcher] Analyzing lead: ${params.name}`);
 
     // Construct the analysis prompt with all available data
     const userPrompt = buildAnalysisPrompt(params);
 
-    // Call GPT model with proper configuration
-    // NOTE: Currently using gpt-4o-mini as placeholder
-    // When GPT-5 is available in the OpenAI SDK, update to:
-    //   model: 'gpt-5-mini',
-    //   reasoning_effort: 'low',
-    //   verbosity: 'medium',
-    //   max_completion_tokens: 2000
-    // See GPT5-BEST-PRACTICES.md for migration guide
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini', // Temporary: will migrate to gpt-5-mini
-      messages: [
+    // Call GPT-5 with web search enabled
+    const response = await openai.responses.create({
+      model: "gpt-5",
+      reasoning: { effort: "low" },
+      max_output_tokens: 2000,
+      tools: [
         {
-          role: 'system',
-          content: getSystemPrompt()
+          type: "web_search",
+        },
+      ],
+      tool_choice: "auto",
+      input: [
+        {
+          role: "system",
+          content: getSystemPrompt(),
         },
         {
-          role: 'user',
-          content: userPrompt
-        }
+          role: "user",
+          content: userPrompt,
+        },
       ],
-      max_tokens: 2000, // Will become max_completion_tokens in GPT-5
-      temperature: 0.7, // Will be removed in GPT-5 (not supported)
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = response.output_text;
 
     if (!content) {
-      throw new Error('No response from GPT-5');
+      throw new Error("No response from GPT-5");
     }
 
     // Parse the structured response
     const analysis = parseGPT5Response(content);
 
-    console.log(`[AI Researcher] Analysis complete for ${params.name} - Grade: ${analysis.grade}`);
+    console.log(
+      `[AI Researcher] Analysis complete for ${params.name} - Grade: ${analysis.grade}`,
+    );
 
     return analysis;
-
   } catch (error) {
-    console.error('[AI Researcher] Error:', error);
-    throw new Error(`Failed to analyze lead: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error("[AI Researcher] Error:", error);
+    throw new Error(
+      `Failed to analyze lead: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
   }
 }
 
 /**
- * System prompt optimized for GPT-5's instruction-following capabilities
+ * System prompt optimized for a comprehensive lead qualification scan
  */
 function getSystemPrompt(): string {
-  return `You are an expert business analyst specializing in local businesses.
+  return `You are a GPT-5 lead qualification analyst.
+You must verify business identity, legitimacy, scale, and fit for digital services using structured checkpoints.
 
-Your job is to research businesses and identify:
-1. Their current digital presence and capabilities
-2. Growth opportunities in marketing, automation, and technology
-3. Specific pain points that could be addressed
-4. How well they'd fit as a potential client for digital services
+Your focus:
+1. Confirm the business truly matches the lead query category.
+2. Validate identity signals (website, NAP consistency, verification, ownership type).
+3. Capture business profile details (industry accuracy, offerings, audience, model, seasonality).
+4. Assess scale and activity (team size, revenue clues, hiring/growth, traffic signals, footprint).
+5. Evaluate brand presence and engagement (social proof, reviews, tone, paid/organic marketing).
+6. Summarize business history (age, reputation longevity, rebrand indicators, ABN clues).
+7. Provide a decisive SEO fit grade.
 
-You must provide:
-- A comprehensive analysis report
-- A compatibility grade (A, B, C, D, or F)
-- Clear reasoning for the grade
-- 3-5 specific outreach hooks
-- 3-5 identified pain points
-- 3-5 growth opportunities
+Guidelines:
+- Only use evidence from the provided material or well-established knowledge; never fabricate specifics.
+- If a data point cannot be confirmed, reply with "Unknown - recommend GPT-5 web search" or "Unknown - requires ABN lookup" as appropriate.
+- Mention the evidence source (website section, LinkedIn hint, etc.) whenever you confirm a datapoint.
+- Keep each bullet one sentence and concise; do not add extra sections.
+- If the business does NOT clearly match the query, mark the match check as "MISMATCH" and explain why.
+- Base business size and market reach on explicit evidence; respond with "Unknown" if unclear.
+- Penalize heavily when the evaluated location is part of a large franchise or national/international brand with centralized marketing; default the SEO grade to C or lower unless clear proof of local marketing autonomy exists, and explain the penalty in the snapshot.
 
-## Grading Criteria
-
-**Grade A (Excellent Fit):**
-- Strong digital presence but clear gaps
-- Multiple locations or large team (scalability)
-- Evidence of growth mindset
-- Budget indicators (professional site, active marketing)
-- Clear, addressable pain points
-
-**Grade B (Good Fit):**
-- Decent digital presence with improvement areas
-- Medium-sized operation
-- Some growth indicators
-- Likely has budget for services
-
-**Grade C (Moderate Fit):**
-- Basic digital presence
-- Smaller operation
-- Limited growth indicators
-- May have budget constraints
-
-**Grade D (Poor Fit):**
-- Minimal digital presence
-- Very small operation
-- No clear growth indicators
-- Likely budget constrained
-
-**Grade F (Not a Fit):**
-- No website or extremely outdated
-- Single-person operation
-- No evidence of business investment
-- Not a viable prospect
-
-Provide your analysis in the following format:
+Respond ONLY in this exact format:
 
 ## GRADE: [A/B/C/D/F]
 
-## REASONING:
-[2-3 sentences explaining the grade]
+## MATCH CHECK:
+[Exact Match | Close Match | MISMATCH | Unknown] - one sentence referencing the query
 
-## REPORT:
-[Detailed analysis covering digital presence, team size, growth indicators, and opportunities]
+## BUSINESS IDENTITY & LEGITIMACY:
+- Website Presence: ...
+- Online Consistency: ...
+- Verified Status: ...
+- Ownership Type: ...
 
-## SUGGESTED HOOKS:
-- [Hook 1]
-- [Hook 2]
-- [Hook 3]
+## BUSINESS PROFILE:
+- Industry / Niche Accuracy: ...
+- Products or Services: ...
+- Target Audience: ...
+- Business Model: ...
+- Seasonality: ...
 
-## PAIN POINTS:
-- [Pain point 1]
-- [Pain point 2]
-- [Pain point 3]
+## BUSINESS SCALE & ACTIVITY:
+- Employee Count / Team Size: ...
+- Revenue Range: ...
+- Growth Indicators: ...
+- Online Traffic Estimate: ...
+- Operational Footprint: ...
 
-## OPPORTUNITIES:
-- [Opportunity 1]
-- [Opportunity 2]
-- [Opportunity 3]`;
+## BRAND PRESENCE & ENGAGEMENT:
+- Social Media Activity: ...
+- Customer Reviews: ...
+- Brand Tone / Quality: ...
+- Advertising Signals: ...
+
+## BUSINESS HISTORY:
+- Year Established: ...
+- Reputation Longevity: ...
+- Rebrand or Name Changes: ...
+
+## BUSINESS SIZE:
+[Micro/Small/Medium/Large/Enterprise/Unknown] - brief justification
+
+## MARKET REACH:
+[Local/Regional/National/International/Unknown] - brief justification
+
+## SNAPSHOT:
+One tight sentence summarizing why the SEO fit grade was chosen.`;
 }
 
 /**
  * Build the user prompt with all available business data
  */
 function buildAnalysisPrompt(params: ResearchLeadParams): string {
-  let prompt = `Analyze this business for compatibility as a potential client:
+  const leadQuery = params.businessType?.trim() || "Unknown (not provided)";
+  const businessType = params.businessType?.trim() || "Not provided";
+
+  let prompt = `Research this business for multi-dimensional qualification.
+Use the supplied content plus your GPT-5 web reasoning toolkit.
+If any checkpoint cannot be confirmed from available evidence, state "Unknown" and recommend either GPT-5 web search or an ABN lookup.
+
+**Lead Query:** ${leadQuery}
 
 **Business Name:** ${params.name}
 **Website:** ${params.website}
-**Business Type:** ${params.businessType}
-**Multiple Locations:** ${params.hasMultipleLocations ? 'Yes' : 'No'}`;
+**Business Type:** ${businessType}
+**Multiple Locations:** ${params.hasMultipleLocations ? "Yes" : "No"}`;
 
   if (params.teamSize) {
     prompt += `\n**Team Size:** ${params.teamSize}`;
   }
 
-  prompt += '\n\n## Website Content:\n';
+  prompt += "\n\n## Website Content:\n";
   prompt += params.websiteContent.slice(0, 3000); // Limit to prevent token overflow
 
   if (params.aboutContent) {
-    prompt += '\n\n## About Page:\n';
+    prompt += "\n\n## About Page:\n";
     prompt += params.aboutContent.slice(0, 2000);
   }
 
   if (params.teamContent) {
-    prompt += '\n\n## Team Page:\n';
+    prompt += "\n\n## Team Page:\n";
     prompt += params.teamContent.slice(0, 2000);
   }
 
-  prompt += '\n\nProvide your complete analysis following the format specified in the system prompt.';
+  prompt += `\n\nFocus checkpoints:
+- Business Identity & Legitimacy: website functionality, NAP consistency across sources, verification badges, ownership type.
+- Business Profile: accurate industry categorization, core offerings, target audience, business model, seasonality cues.
+- Business Scale & Activity: employee/team indicators, revenue clues, hiring or growth signals, traffic/visibility hints, operational footprint.
+- Brand Presence & Engagement: social channels, review volume/sentiment, creative quality, advertising or SEO signals.
+- Business History: founding or registration year (flag ABN lookup if in Australia), longevity of reviews/mentions, signs of rebrands.
+- Final Verdict: grade SEO fit and explain the rationale in the snapshot, specifically calling out if a large parent brand affiliation reduced the score.
+
+Provide your complete analysis following the exact format from the system prompt.`;
 
   return prompt;
 }
@@ -197,54 +219,69 @@ function buildAnalysisPrompt(params: ResearchLeadParams): string {
  * Parse GPT-5 response into structured data
  */
 function parseGPT5Response(content: string): LeadAnalysis {
-  // Extract grade
   const gradeMatch = content.match(/##\s*GRADE:\s*([A-F])/i);
-  const grade = (gradeMatch?.[1]?.toUpperCase() || 'F') as 'A' | 'B' | 'C' | 'D' | 'F';
+  const grade = (gradeMatch?.[1]?.toUpperCase() || "F") as
+    | "A"
+    | "B"
+    | "C"
+    | "D"
+    | "F";
 
-  // Extract reasoning
-  const reasoningMatch = content.match(/##\s*REASONING:\s*\n([\s\S]*?)(?=\n##|$)/i);
-  const gradeReasoning = reasoningMatch?.[1]?.trim() || 'No reasoning provided';
+  const matchCheckMatch = content.match(
+    /##\s*MATCH CHECK:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
+  const identityLegitimacyMatch = content.match(
+    /##\s*BUSINESS IDENTITY\s*&\s*LEGITIMACY:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
+  const businessProfileMatch = content.match(
+    /##\s*BUSINESS PROFILE:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
+  const scaleActivityMatch = content.match(
+    /##\s*BUSINESS SCALE\s*&\s*ACTIVITY:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
+  const brandPresenceMatch = content.match(
+    /##\s*BRAND PRESENCE\s*&\s*ENGAGEMENT:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
+  const businessHistoryMatch = content.match(
+    /##\s*BUSINESS HISTORY:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
+  const businessSizeMatch = content.match(
+    /##\s*BUSINESS SIZE:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
+  const marketReachMatch = content.match(
+    /##\s*MARKET REACH:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
+  const snapshotMatch = content.match(
+    /##\s*SNAPSHOT:\s*\n([\s\S]*?)(?=\n##|$)/i,
+  );
 
-  // Extract report
-  const reportMatch = content.match(/##\s*REPORT:\s*\n([\s\S]*?)(?=\n##|$)/i);
-  const report = reportMatch?.[1]?.trim() || content;
+  const matchCheck = matchCheckMatch?.[1]?.trim();
+  const identityLegitimacy = identityLegitimacyMatch?.[1]?.trim();
+  const businessProfile = businessProfileMatch?.[1]?.trim();
+  const scaleActivity = scaleActivityMatch?.[1]?.trim();
+  const brandPresence = brandPresenceMatch?.[1]?.trim();
+  const businessHistory = businessHistoryMatch?.[1]?.trim();
+  const businessSize = businessSizeMatch?.[1]?.trim();
+  const marketReach = marketReachMatch?.[1]?.trim();
+  const snapshot = snapshotMatch?.[1]?.trim();
 
-  // Extract suggested hooks
-  const hooksMatch = content.match(/##\s*SUGGESTED HOOKS:\s*\n([\s\S]*?)(?=\n##|$)/i);
-  const suggestedHooks = hooksMatch?.[1]
-    ? hooksMatch[1]
-        .split('\n')
-        .filter(line => line.trim().startsWith('-'))
-        .map(line => line.replace(/^-\s*/, '').trim())
-        .filter(Boolean)
-    : [];
-
-  // Extract pain points
-  const painPointsMatch = content.match(/##\s*PAIN POINTS:\s*\n([\s\S]*?)(?=\n##|$)/i);
-  const painPoints = painPointsMatch?.[1]
-    ? painPointsMatch[1]
-        .split('\n')
-        .filter(line => line.trim().startsWith('-'))
-        .map(line => line.replace(/^-\s*/, '').trim())
-        .filter(Boolean)
-    : [];
-
-  // Extract opportunities
-  const opportunitiesMatch = content.match(/##\s*OPPORTUNITIES:\s*\n([\s\S]*?)(?=\n##|$)/i);
-  const opportunities = opportunitiesMatch?.[1]
-    ? opportunitiesMatch[1]
-        .split('\n')
-        .filter(line => line.trim().startsWith('-'))
-        .map(line => line.replace(/^-\s*/, '').trim())
-        .filter(Boolean)
-    : [];
+  const gradeReasoning = snapshot || matchCheck || "No summary provided";
 
   return {
-    report,
+    report: content.trim(),
     grade,
     gradeReasoning,
-    suggestedHooks,
-    painPoints,
-    opportunities
+    matchCheck,
+    identityLegitimacy,
+    businessProfile,
+    scaleActivity,
+    brandPresence,
+    businessHistory,
+    businessSize,
+    marketReach,
+    snapshot,
+    suggestedHooks: null,
+    painPoints: null,
+    opportunities: null,
   };
 }

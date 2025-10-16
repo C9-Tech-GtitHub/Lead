@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS runs (
   -- Run configuration
   business_type TEXT NOT NULL,
   location TEXT NOT NULL,
-  target_count INTEGER NOT NULL CHECK (target_count >= 5 AND target_count <= 50),
+  target_count INTEGER NOT NULL CHECK (target_count >= 5 AND target_count <= 200),
 
   -- Progress tracking
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'scraping', 'researching', 'completed', 'failed')),

@@ -1,7 +1,7 @@
-'use server';
+"use server";
 
-import { createClient } from '@/lib/supabase/server';
-import { inngest } from '@/lib/inngest/client';
+import { createClient } from "@/lib/supabase/server";
+import { inngest } from "@/lib/inngest/client";
 
 interface CreateRunParams {
   businessType: string;
@@ -9,8 +9,17 @@ interface CreateRunParams {
   targetCount: number;
 }
 
-export async function createRun({ businessType, location, targetCount }: CreateRunParams) {
+export async function createRun({
+  businessType,
+  location,
+  targetCount,
+}: CreateRunParams) {
   const supabase = await createClient();
+
+  const sanitizedTargetCount = Math.max(
+    5,
+    Math.min(200, Number.isFinite(targetCount) ? targetCount : 5),
+  );
 
   // Get current user
   const {
@@ -18,18 +27,18 @@ export async function createRun({ businessType, location, targetCount }: CreateR
   } = await supabase.auth.getUser();
 
   if (!user) {
-    throw new Error('Not authenticated');
+    throw new Error("Not authenticated");
   }
 
   // Create the run in the database
   const { data: run, error: createError } = await supabase
-    .from('runs')
+    .from("runs")
     .insert({
       user_id: user.id,
       business_type: businessType,
       location: location,
-      target_count: targetCount,
-      status: 'pending',
+      target_count: sanitizedTargetCount,
+      status: "pending",
     })
     .select()
     .single();
@@ -38,13 +47,13 @@ export async function createRun({ businessType, location, targetCount }: CreateR
 
   // Trigger the Inngest workflow using inngest.send()
   await inngest.send({
-    name: 'lead/run.created',
+    name: "lead/run.created",
     data: {
       runId: run.id,
       userId: user.id,
       businessType,
       location,
-      targetCount,
+      targetCount: sanitizedTargetCount,
     },
   });
 

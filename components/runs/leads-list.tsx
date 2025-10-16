@@ -32,6 +32,7 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [filterGrade, setFilterGrade] = useState<string>('all');
   const [researchingLeads, setResearchingLeads] = useState<Set<string>>(new Set());
+  const [isResearchingAll, setIsResearchingAll] = useState(false);
 
   const handleResearchLead = async (leadId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click
@@ -93,6 +94,51 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
     }
   };
 
+  const handleResearchAll = async () => {
+    const pendingLeadIds = leads
+      .filter((lead) => lead.research_status === 'pending')
+      .map((lead) => lead.id);
+
+    if (pendingLeadIds.length === 0) {
+      return;
+    }
+
+    if (!confirm('Start researching all pending leads in this run?')) {
+      return;
+    }
+
+    setIsResearchingAll(true);
+    setResearchingLeads(prev => {
+      const newSet = new Set(prev);
+      pendingLeadIds.forEach(id => newSet.add(id));
+      return newSet;
+    });
+
+    try {
+      const response = await fetch('/api/inngest/trigger-research-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to trigger research');
+      }
+
+      // Status updates will come through the realtime subscription
+    } catch (error) {
+      console.error('Error triggering research all:', error);
+      alert('Failed to start research. Please try again.');
+      setResearchingLeads(prev => {
+        const newSet = new Set(prev);
+        pendingLeadIds.forEach(id => newSet.delete(id));
+        return newSet;
+      });
+    } finally {
+      setIsResearchingAll(false);
+    }
+  };
+
   useEffect(() => {
     const supabase = createClient();
 
@@ -135,6 +181,8 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
     return lead.compatibility_grade === filterGrade;
   });
 
+  const hasPendingLeads = leads.some((lead) => lead.research_status === 'pending');
+
   if (leads.length === 0) {
     return (
       <div className="text-center py-12 bg-white rounded-lg shadow">
@@ -149,42 +197,53 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
   return (
     <>
       {/* Filter Buttons */}
-      <div className="mb-4 flex gap-2">
-        <FilterButton
-          label="All"
-          active={filterGrade === 'all'}
-          onClick={() => setFilterGrade('all')}
-        />
-        <FilterButton
-          label="A"
-          active={filterGrade === 'A'}
-          onClick={() => setFilterGrade('A')}
-          color="text-green-600"
-        />
-        <FilterButton
-          label="B"
-          active={filterGrade === 'B'}
-          onClick={() => setFilterGrade('B')}
-          color="text-blue-600"
-        />
-        <FilterButton
-          label="C"
-          active={filterGrade === 'C'}
-          onClick={() => setFilterGrade('C')}
-          color="text-yellow-600"
-        />
-        <FilterButton
-          label="D"
-          active={filterGrade === 'D'}
-          onClick={() => setFilterGrade('D')}
-          color="text-orange-600"
-        />
-        <FilterButton
-          label="F"
-          active={filterGrade === 'F'}
-          onClick={() => setFilterGrade('F')}
-          color="text-red-600"
-        />
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-2">
+          <FilterButton
+            label="All"
+            active={filterGrade === 'all'}
+            onClick={() => setFilterGrade('all')}
+          />
+          <FilterButton
+            label="A"
+            active={filterGrade === 'A'}
+            onClick={() => setFilterGrade('A')}
+            color="text-green-600"
+          />
+          <FilterButton
+            label="B"
+            active={filterGrade === 'B'}
+            onClick={() => setFilterGrade('B')}
+            color="text-blue-600"
+          />
+          <FilterButton
+            label="C"
+            active={filterGrade === 'C'}
+            onClick={() => setFilterGrade('C')}
+            color="text-yellow-600"
+          />
+          <FilterButton
+            label="D"
+            active={filterGrade === 'D'}
+            onClick={() => setFilterGrade('D')}
+            color="text-orange-600"
+          />
+          <FilterButton
+            label="F"
+            active={filterGrade === 'F'}
+            onClick={() => setFilterGrade('F')}
+            color="text-red-600"
+          />
+        </div>
+
+        <button
+          onClick={handleResearchAll}
+          disabled={!hasPendingLeads || isResearchingAll}
+          className="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700 disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed transition-colors"
+          title="Research all pending leads"
+        >
+          {isResearchingAll ? 'Starting...' : '🔬 Research All'}
+        </button>
       </div>
 
       {/* Leads Grid */}

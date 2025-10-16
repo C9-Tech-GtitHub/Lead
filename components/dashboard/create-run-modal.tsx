@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createRun } from '@/lib/actions/create-run';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createRun } from "@/lib/actions/create-run";
 
 interface CreateRunModalProps {
   onClose: () => void;
 }
 
 export function CreateRunModal({ onClose }: CreateRunModalProps) {
-  const [businessType, setBusinessType] = useState('Camping & Hiking Gear');
-  const [location, setLocation] = useState('');
-  const [targetCount, setTargetCount] = useState(10);
+  const [businessType, setBusinessType] = useState("Camping & Hiking Gear");
+  const [location, setLocation] = useState("");
+  const [targetCount, setTargetCount] = useState(25);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -33,9 +33,9 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
       onClose();
 
       // Force a page refresh to ensure the new run appears
-      window.location.href = '/dashboard';
+      window.location.href = "/dashboard";
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create run');
+      setError(err instanceof Error ? err.message : "Failed to create run");
     } finally {
       setLoading(false);
     }
@@ -63,7 +63,10 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="businessType" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="businessType"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Business Type
             </label>
             <input
@@ -75,11 +78,16 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
               placeholder="e.g., realtors, dentists, law firms"
             />
-            <p className="mt-1 text-xs text-gray-500">What type of business are you searching for?</p>
+            <p className="mt-1 text-xs text-gray-500">
+              What type of business are you searching for?
+            </p>
           </div>
 
           <div>
-            <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="location"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Location
             </label>
 
@@ -87,14 +95,14 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
             <div className="mb-2 flex gap-2">
               <button
                 type="button"
-                onClick={() => setLocation('Sydney')}
+                onClick={() => setLocation("Sydney")}
                 className="px-3 py-1 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
               >
                 🏙️ Sydney
               </button>
               <button
                 type="button"
-                onClick={() => setLocation('Melbourne')}
+                onClick={() => setLocation("Melbourne")}
                 className="px-3 py-1 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
               >
                 🏙️ Melbourne
@@ -116,7 +124,10 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
           </div>
 
           <div>
-            <label htmlFor="targetCount" className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="targetCount"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Number of Leads
             </label>
             <input
@@ -124,12 +135,23 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               type="number"
               required
               min={5}
-              max={50}
+              max={200}
+              step={5}
               value={targetCount}
-              onChange={(e) => setTargetCount(parseInt(e.target.value))}
+              onChange={(e) => {
+                const value = parseInt(e.target.value, 10);
+                if (!Number.isNaN(value)) {
+                  setTargetCount(Math.max(5, Math.min(200, value)));
+                } else {
+                  setTargetCount(5);
+                }
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             />
-            <p className="mt-1 text-xs text-gray-500">Between 5 and 50 leads</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Between 5 and 200 leads — use higher counts for major cities like
+              Sydney or Melbourne.
+            </p>
           </div>
 
           <div className="flex gap-3 mt-6">
@@ -146,7 +168,7 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
               disabled={loading}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Creating...' : 'Start Research'}
+              {loading ? "Creating..." : "Start Research"}
             </button>
           </div>
         </form>

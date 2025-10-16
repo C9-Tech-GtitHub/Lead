@@ -1,18 +1,24 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import dynamic from 'next/dynamic';
-import Link from 'next/link';
+import { useMemo, useState } from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
+
+import { parseSeoSummary, type SectionItem } from "@/lib/utils/parse-ai-report";
+import { renderRichText } from "@/lib/utils/render-rich-text";
 
 // Dynamically import LeadsMap to avoid SSR issues with Leaflet
-const LeadsMap = dynamic(() => import('./leads-map').then(mod => ({ default: mod.LeadsMap })), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-gray-100">
-      <div className="text-gray-500">Loading map...</div>
-    </div>
-  )
-});
+const LeadsMap = dynamic(
+  () => import("./leads-map").then((mod) => ({ default: mod.LeadsMap })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="w-full h-full flex items-center justify-center bg-gray-100">
+        <div className="text-gray-500">Loading map...</div>
+      </div>
+    ),
+  },
+);
 
 interface Run {
   id: string;
@@ -50,6 +56,11 @@ interface Lead {
   created_at: string;
 }
 
+interface DetailSection {
+  title: string;
+  items: SectionItem[];
+}
+
 interface LeadsMapWithSidebarProps {
   runs: Run[];
   leads: Lead[];
@@ -59,13 +70,72 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
+  const seoSummary = useMemo(
+    () => parseSeoSummary(selectedLead?.ai_report),
+    [selectedLead?.ai_report],
+  );
+  const snapshotText =
+    seoSummary?.snapshot ?? selectedLead?.grade_reasoning ?? null;
+
+  const highlightCards = useMemo(() => {
+    if (!seoSummary) {
+      return [];
+    }
+
+    return [
+      {
+        title: "Match Check",
+        value: seoSummary.matchCheck ?? "Unknown",
+      },
+      {
+        title: "Business Size",
+        value: seoSummary.businessSize ?? "Unknown",
+      },
+      {
+        title: "Market Reach",
+        value: seoSummary.marketReach ?? "Unknown",
+      },
+    ].filter((card) => Boolean(card.value));
+  }, [seoSummary]);
+
+  const detailSections = useMemo<DetailSection[]>(() => {
+    if (!seoSummary) {
+      return [];
+    }
+
+    const sections: DetailSection[] = [
+      {
+        title: "Business Identity & Legitimacy",
+        items: seoSummary.identityLegitimacy ?? [],
+      },
+      {
+        title: "Business Profile",
+        items: seoSummary.businessProfile ?? [],
+      },
+      {
+        title: "Business Scale & Activity",
+        items: seoSummary.scaleActivity ?? [],
+      },
+      {
+        title: "Brand Presence & Engagement",
+        items: seoSummary.brandPresence ?? [],
+      },
+      {
+        title: "Business History",
+        items: seoSummary.businessHistory ?? [],
+      },
+    ];
+
+    return sections.filter((section) => section.items.length > 0);
+  }, [seoSummary]);
+
   // Filter leads based on selected run
   const filteredLeads = selectedRunId
     ? leads.filter((lead) => lead.run_id === selectedRunId)
     : leads;
 
   const leadsWithCoordinates = filteredLeads.filter(
-    (lead) => lead.latitude && lead.longitude
+    (lead) => lead.latitude && lead.longitude,
   );
 
   const handleMarkerClick = (leadId: string) => {
@@ -90,7 +160,9 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
         <button
           onClick={() => setSelectedRunId(null)}
           className={`w-full text-left p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${
-            selectedRunId === null ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+            selectedRunId === null
+              ? "bg-blue-50 border-l-4 border-l-blue-500"
+              : ""
           }`}
         >
           <div className="font-semibold text-gray-900">All Leads</div>
@@ -102,34 +174,40 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
         {/* Run List */}
         {runs.map((run) => {
           const runLeads = leads.filter((l) => l.run_id === run.id);
-          const runLeadsWithCoords = runLeads.filter((l) => l.latitude && l.longitude);
+          const runLeadsWithCoords = runLeads.filter(
+            (l) => l.latitude && l.longitude,
+          );
 
           return (
             <button
               key={run.id}
               onClick={() => setSelectedRunId(run.id)}
               className={`w-full text-left p-4 border-b border-gray-200 hover:bg-gray-50 transition-colors ${
-                selectedRunId === run.id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                selectedRunId === run.id
+                  ? "bg-blue-50 border-l-4 border-l-blue-500"
+                  : ""
               }`}
             >
-              <div className="font-semibold text-gray-900">{run.business_type}</div>
+              <div className="font-semibold text-gray-900">
+                {run.business_type}
+              </div>
               <div className="text-sm text-gray-600 mt-1">{run.location}</div>
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-700">
                   {runLeadsWithCoords.length} on map
                 </span>
-                {run.status === 'completed' && (
+                {run.status === "completed" && (
                   <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700">
                     Completed
                   </span>
                 )}
-                {run.status === 'researching' && (
+                {run.status === "researching" && (
                   <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700">
                     In Progress
                   </span>
                 )}
               </div>
-              {run.status === 'completed' && (
+              {run.status === "completed" && (
                 <div className="flex gap-1 mt-2">
                   {run.grade_a_count > 0 && (
                     <span className="text-xs px-1.5 py-0.5 rounded bg-green-500 text-white">
@@ -183,32 +261,46 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
           <div className="flex flex-wrap gap-4">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-green-500"></div>
-              <span className="text-sm text-gray-900 font-medium">Grade A - Excellent Match</span>
+              <span className="text-sm text-gray-900 font-medium">
+                Grade A - Excellent Match
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-              <span className="text-sm text-gray-900 font-medium">Grade B - Good Match</span>
+              <span className="text-sm text-gray-900 font-medium">
+                Grade B - Good Match
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-              <span className="text-sm text-gray-900 font-medium">Grade C - Average Match</span>
+              <span className="text-sm text-gray-900 font-medium">
+                Grade C - Average Match
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-              <span className="text-sm text-gray-900 font-medium">Grade D - Below Average</span>
+              <span className="text-sm text-gray-900 font-medium">
+                Grade D - Below Average
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-red-500"></div>
-              <span className="text-sm text-gray-900 font-medium">Grade F - Poor Match</span>
+              <span className="text-sm text-gray-900 font-medium">
+                Grade F - Poor Match
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-gray-500"></div>
-              <span className="text-sm text-gray-900 font-medium">Not yet graded</span>
+              <span className="text-sm text-gray-900 font-medium">
+                Not yet graded
+              </span>
             </div>
           </div>
           <div className="mt-2 text-sm text-gray-700">
-            Showing <span className="font-semibold">{leadsWithCoordinates.length}</span> of{' '}
-            <span className="font-semibold">{filteredLeads.length}</span> leads
+            Showing{" "}
+            <span className="font-semibold">{leadsWithCoordinates.length}</span>{" "}
+            of <span className="font-semibold">{filteredLeads.length}</span>{" "}
+            leads
             {filteredLeads.length > leadsWithCoordinates.length &&
               ` (${filteredLeads.length - leadsWithCoordinates.length} without coordinates)`}
           </div>
@@ -224,24 +316,35 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
 
       {/* Lead Details Modal */}
       {selectedLead && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4" style={{ zIndex: 9999 }}>
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4"
+          style={{ zIndex: 9999 }}
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-gray-200 p-6 flex justify-between items-start">
               <div className="flex-1">
-                <h2 className="text-2xl font-bold text-gray-900">{selectedLead.name}</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {selectedLead.name}
+                </h2>
                 {selectedLead.compatibility_grade && (
                   <div className="mt-2">
                     <span
                       className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold"
                       style={{
                         backgroundColor:
-                          selectedLead.compatibility_grade === 'A' ? '#22c55e' :
-                          selectedLead.compatibility_grade === 'B' ? '#3b82f6' :
-                          selectedLead.compatibility_grade === 'C' ? '#eab308' :
-                          selectedLead.compatibility_grade === 'D' ? '#f97316' :
-                          selectedLead.compatibility_grade === 'F' ? '#ef4444' : '#6b7280',
-                        color: 'white',
+                          selectedLead.compatibility_grade === "A"
+                            ? "#22c55e"
+                            : selectedLead.compatibility_grade === "B"
+                              ? "#3b82f6"
+                              : selectedLead.compatibility_grade === "C"
+                                ? "#eab308"
+                                : selectedLead.compatibility_grade === "D"
+                                  ? "#f97316"
+                                  : selectedLead.compatibility_grade === "F"
+                                    ? "#ef4444"
+                                    : "#6b7280",
+                        color: "white",
                       }}
                     >
                       Grade {selectedLead.compatibility_grade}
@@ -261,16 +364,20 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
             <div className="p-6 space-y-6">
               {/* Contact Info */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Contact Information</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                  Contact Information
+                </h3>
                 <div className="space-y-2 text-sm">
                   {selectedLead.address && (
                     <p className="text-gray-700">
-                      <strong className="text-gray-900">Address:</strong> {selectedLead.address}
+                      <strong className="text-gray-900">Address:</strong>{" "}
+                      {selectedLead.address}
                     </p>
                   )}
                   {selectedLead.phone && (
                     <p className="text-gray-700">
-                      <strong className="text-gray-900">Phone:</strong> {selectedLead.phone}
+                      <strong className="text-gray-900">Phone:</strong>{" "}
+                      {selectedLead.phone}
                     </p>
                   )}
                   {selectedLead.website && (
@@ -300,75 +407,67 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
                 </div>
               </div>
 
-              {/* Grade Reasoning */}
-              {selectedLead.grade_reasoning && (
+              {/* SEO Snapshot */}
+              {highlightCards.length > 0 && (
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Grade Reasoning</h3>
-                  <p className="text-gray-700 text-sm leading-relaxed">{selectedLead.grade_reasoning}</p>
-                </div>
-              )}
-
-              {/* AI Report */}
-              {selectedLead.ai_report && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">AI Research Report</h3>
-                  <div className="prose prose-sm max-w-none text-gray-700">
-                    {selectedLead.ai_report.split('\n').map((paragraph, idx) => (
-                      <p key={idx} className="mb-2">{paragraph}</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    SEO Snapshot
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {highlightCards.map((card) => (
+                      <HighlightCard
+                        key={card.title}
+                        title={card.title}
+                        value={card.value}
+                      />
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* Suggested Hooks */}
-              {selectedLead.suggested_hooks && selectedLead.suggested_hooks.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Suggested Outreach Hooks</h3>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
-                    {selectedLead.suggested_hooks.map((hook, idx) => (
-                      <li key={idx}>{hook}</li>
-                    ))}
-                  </ul>
-                </div>
+              {/* Grade Reasoning */}
+              {snapshotText && (
+                <SnapshotCard title="SEO Fit Snapshot" value={snapshotText} />
               )}
 
-              {/* Pain Points */}
-              {selectedLead.pain_points && selectedLead.pain_points.length > 0 && (
+              {/* Detailed Sections */}
+              {detailSections.length > 0 && (
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Pain Points</h3>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
-                    {selectedLead.pain_points.map((point, idx) => (
-                      <li key={idx}>{point}</li>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    Detailed Findings
+                  </h3>
+                  <div className="space-y-4">
+                    {detailSections.map((section) => (
+                      <DetailCard
+                        key={section.title}
+                        title={section.title}
+                        items={section.items}
+                      />
                     ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Opportunities */}
-              {selectedLead.opportunities && selectedLead.opportunities.length > 0 && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Opportunities</h3>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
-                    {selectedLead.opportunities.map((opp, idx) => (
-                      <li key={idx}>{opp}</li>
-                    ))}
-                  </ul>
+                  </div>
                 </div>
               )}
 
               {/* Business Details */}
-              {(selectedLead.team_size || selectedLead.has_multiple_locations) && (
+              {(selectedLead.team_size ||
+                selectedLead.has_multiple_locations) && (
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Business Details</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    Business Details
+                  </h3>
                   <div className="space-y-2 text-sm">
                     {selectedLead.team_size && (
                       <p className="text-gray-700">
-                        <strong className="text-gray-900">Team Size:</strong> {selectedLead.team_size}
+                        <strong className="text-gray-900">Team Size:</strong>{" "}
+                        {selectedLead.team_size}
                       </p>
                     )}
                     {selectedLead.has_multiple_locations && (
                       <p className="text-gray-700">
-                        <strong className="text-gray-900">Multiple Locations:</strong> Yes
+                        <strong className="text-gray-900">
+                          Multiple Locations:
+                        </strong>{" "}
+                        Yes
                       </p>
                     )}
                   </div>
@@ -378,6 +477,58 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function HighlightCard({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+        {title}
+      </p>
+      <p className="mt-2 text-sm text-gray-800">{renderRichText(value)}</p>
+    </div>
+  );
+}
+
+function SnapshotCard({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+          {title}
+        </h4>
+      </div>
+      <div className="p-4">
+        <p className="text-sm text-gray-800 leading-relaxed">
+          {renderRichText(value)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DetailCard({ title, items }: { title: string; items: SectionItem[] }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+          {title}
+        </h4>
+      </div>
+      <div className="p-4 space-y-3">
+        {items.map((item) => (
+          <div key={`${title}-${item.label}`} className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {item.label}
+            </p>
+            <p className="text-sm text-gray-800">
+              {renderRichText(item.value)}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

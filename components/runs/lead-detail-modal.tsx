@@ -1,4 +1,9 @@
-'use client';
+"use client";
+
+import { useMemo } from "react";
+
+import { parseSeoSummary, type SectionItem } from "@/lib/utils/parse-ai-report";
+import { renderRichText } from "@/lib/utils/render-rich-text";
 
 interface Lead {
   id: string;
@@ -18,12 +23,75 @@ interface Lead {
   error_message?: string;
 }
 
+interface DetailSection {
+  title: string;
+  items: SectionItem[];
+}
+
 interface LeadDetailModalProps {
   lead: Lead;
   onClose: () => void;
 }
 
 export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
+  const seoSummary = useMemo(
+    () => parseSeoSummary(lead.ai_report),
+    [lead.ai_report],
+  );
+  const snapshotText = seoSummary?.snapshot ?? lead.grade_reasoning;
+
+  const highlightCards = useMemo(() => {
+    if (!seoSummary) {
+      return [];
+    }
+
+    return [
+      {
+        title: "Match Check",
+        value: seoSummary.matchCheck ?? "Unknown",
+      },
+      {
+        title: "Business Size",
+        value: seoSummary.businessSize ?? "Unknown",
+      },
+      {
+        title: "Market Reach",
+        value: seoSummary.marketReach ?? "Unknown",
+      },
+    ].filter((card) => Boolean(card.value));
+  }, [seoSummary]);
+
+  const detailSections = useMemo<DetailSection[]>(() => {
+    if (!seoSummary) {
+      return [];
+    }
+
+    const sections: DetailSection[] = [
+      {
+        title: "Business Identity & Legitimacy",
+        items: seoSummary.identityLegitimacy ?? [],
+      },
+      {
+        title: "Business Profile",
+        items: seoSummary.businessProfile ?? [],
+      },
+      {
+        title: "Business Scale & Activity",
+        items: seoSummary.scaleActivity ?? [],
+      },
+      {
+        title: "Brand Presence & Engagement",
+        items: seoSummary.brandPresence ?? [],
+      },
+      {
+        title: "Business History",
+        items: seoSummary.businessHistory ?? [],
+      },
+    ];
+
+    return sections.filter((section) => section.items.length > 0);
+  }, [seoSummary]);
+
   return (
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto"
@@ -60,9 +128,7 @@ export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
               Contact Information
             </h3>
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              {lead.address && (
-                <InfoRow label="Address" value={lead.address} />
-              )}
+              {lead.address && <InfoRow label="Address" value={lead.address} />}
               {lead.phone && <InfoRow label="Phone" value={lead.phone} />}
               {lead.website && (
                 <InfoRow
@@ -70,7 +136,7 @@ export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
                   value={
                     <a
                       href={
-                        lead.website.startsWith('http')
+                        lead.website.startsWith("http")
                           ? lead.website
                           : `https://${lead.website}`
                       }
@@ -105,88 +171,45 @@ export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
             </div>
           </section>
 
-          {/* Grade Reasoning */}
-          {lead.grade_reasoning && (
+          {/* SEO Snapshot */}
+          {highlightCards.length > 0 && (
             <section>
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Grade Reasoning
+                SEO Snapshot
               </h3>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-gray-700">{lead.grade_reasoning}</p>
+              <div className="grid gap-4 md:grid-cols-3">
+                {highlightCards.map((card) => (
+                  <HighlightCard
+                    key={card.title}
+                    title={card.title}
+                    value={card.value}
+                  />
+                ))}
               </div>
             </section>
           )}
 
-          {/* Suggested Hooks */}
-          {lead.suggested_hooks && lead.suggested_hooks.length > 0 && (
+          {/* Snapshot Narrative */}
+          {snapshotText && (
             <section>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Suggested Outreach Hooks
-              </h3>
-              <ul className="space-y-2">
-                {lead.suggested_hooks.map((hook, index) => (
-                  <li
-                    key={index}
-                    className="flex items-start gap-2 bg-green-50 rounded-lg p-3"
-                  >
-                    <span className="text-green-600 font-bold mt-0.5">→</span>
-                    <span className="text-gray-700">{hook}</span>
-                  </li>
-                ))}
-              </ul>
+              <SnapshotCard title="SEO Fit Snapshot" value={snapshotText} />
             </section>
           )}
 
-          {/* Pain Points */}
-          {lead.pain_points && lead.pain_points.length > 0 && (
+          {/* Detailed Sections */}
+          {detailSections.length > 0 && (
             <section>
               <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Identified Pain Points
+                Detailed Findings
               </h3>
-              <ul className="space-y-2">
-                {lead.pain_points.map((point, index) => (
-                  <li
-                    key={index}
-                    className="flex items-start gap-2 bg-red-50 rounded-lg p-3"
-                  >
-                    <span className="text-red-600 font-bold mt-0.5">⚠</span>
-                    <span className="text-gray-700">{point}</span>
-                  </li>
+              <div className="space-y-4">
+                {detailSections.map((section) => (
+                  <DetailCard
+                    key={section.title}
+                    title={section.title}
+                    items={section.items}
+                  />
                 ))}
-              </ul>
-            </section>
-          )}
-
-          {/* Opportunities */}
-          {lead.opportunities && lead.opportunities.length > 0 && (
-            <section>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Growth Opportunities
-              </h3>
-              <ul className="space-y-2">
-                {lead.opportunities.map((opportunity, index) => (
-                  <li
-                    key={index}
-                    className="flex items-start gap-2 bg-blue-50 rounded-lg p-3"
-                  >
-                    <span className="text-blue-600 font-bold mt-0.5">💡</span>
-                    <span className="text-gray-700">{opportunity}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {/* Full AI Report */}
-          {lead.ai_report && (
-            <section>
-              <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                Full AI Analysis Report
-              </h3>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
-                  {lead.ai_report}
-                </pre>
               </div>
             </section>
           )}
@@ -208,13 +231,7 @@ export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
   );
 }
 
-function InfoRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex gap-2">
       <span className="font-medium text-gray-700 min-w-[80px]">{label}:</span>
@@ -223,13 +240,65 @@ function InfoRow({
   );
 }
 
+function HighlightCard({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-purple-600">
+        {title}
+      </p>
+      <p className="mt-2 text-sm text-gray-800">{renderRichText(value)}</p>
+    </div>
+  );
+}
+
+function SnapshotCard({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+          {title}
+        </h4>
+      </div>
+      <div className="p-4">
+        <p className="text-sm text-gray-800 leading-relaxed">
+          {renderRichText(value)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function DetailCard({ title, items }: { title: string; items: SectionItem[] }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="bg-gradient-to-r from-purple-50 to-blue-50 px-4 py-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-purple-700">
+          {title}
+        </h4>
+      </div>
+      <div className="p-4 space-y-3">
+        {items.map((item) => (
+          <div key={`${title}-${item.label}`} className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+              {item.label}
+            </p>
+            <p className="text-sm text-gray-800">
+              {renderRichText(item.value)}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function GradeBadge({ grade }: { grade: string }) {
   const colors: Record<string, string> = {
-    A: 'bg-green-100 text-green-700',
-    B: 'bg-blue-100 text-blue-700',
-    C: 'bg-yellow-100 text-yellow-700',
-    D: 'bg-orange-100 text-orange-700',
-    F: 'bg-red-100 text-red-700',
+    A: "bg-green-100 text-green-700",
+    B: "bg-blue-100 text-blue-700",
+    C: "bg-yellow-100 text-yellow-700",
+    D: "bg-orange-100 text-orange-700",
+    F: "bg-red-100 text-red-700",
   };
 
   return (
@@ -245,11 +314,11 @@ function GradeBadge({ grade }: { grade: string }) {
 
 function ResearchStatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending: 'bg-gray-100 text-gray-700',
-    scraping: 'bg-blue-100 text-blue-700',
-    analyzing: 'bg-purple-100 text-purple-700',
-    completed: 'bg-green-100 text-green-700',
-    failed: 'bg-red-100 text-red-700',
+    pending: "bg-gray-100 text-gray-700",
+    scraping: "bg-blue-100 text-blue-700",
+    analyzing: "bg-purple-100 text-purple-700",
+    completed: "bg-green-100 text-green-700",
+    failed: "bg-red-100 text-red-700",
   };
 
   return (
