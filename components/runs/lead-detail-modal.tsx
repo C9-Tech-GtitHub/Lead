@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 import { parseSeoSummary, type SectionItem } from "@/lib/utils/parse-ai-report";
 import { renderRichText } from "@/lib/utils/render-rich-text";
@@ -34,6 +35,25 @@ interface LeadDetailModalProps {
 }
 
 export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
+  const [emails, setEmails] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadEmails = async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('lead_emails')
+        .select('*')
+        .eq('lead_id', lead.id)
+        .order('confidence', { ascending: false });
+
+      if (data) {
+        setEmails(data);
+      }
+    };
+
+    loadEmails();
+  }, [lead.id]);
+
   const seoSummary = useMemo(
     () => parseSeoSummary(lead.ai_report),
     [lead.ai_report],
@@ -170,6 +190,73 @@ export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
               )}
             </div>
           </section>
+
+          {/* Contact Emails */}
+          {emails.length > 0 && (
+            <section>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Contact Emails ({emails.length})
+              </h3>
+              <div className="space-y-2">
+                {emails.map((email) => (
+                  <div
+                    key={email.id}
+                    className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm transition-shadow"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <a
+                          href={`mailto:${email.email}`}
+                          className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                        >
+                          {email.email}
+                        </a>
+                        {(email.first_name || email.last_name) && (
+                          <p className="text-xs text-gray-600 mt-0.5">
+                            {email.first_name} {email.last_name}
+                            {email.position && ` - ${email.position}`}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-1.5 items-center">
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-medium ${
+                            email.type === 'personal'
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}
+                        >
+                          {email.type}
+                        </span>
+                        {email.verification_status === 'valid' && (
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">
+                            ✓ verified
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-500">
+                          {email.confidence}%
+                        </span>
+                      </div>
+                    </div>
+                    {(email.department || email.seniority) && (
+                      <div className="flex gap-1.5 mt-2">
+                        {email.department && (
+                          <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs">
+                            {email.department}
+                          </span>
+                        )}
+                        {email.seniority && (
+                          <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs">
+                            {email.seniority}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* SEO Snapshot */}
           {highlightCards.length > 0 && (

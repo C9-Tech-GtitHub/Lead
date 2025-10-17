@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { LeadDetailModal } from './lead-detail-modal';
+import { EmailFinderModal } from './email-finder-modal';
 
 interface Lead {
   id: string;
@@ -20,6 +21,7 @@ interface Lead {
   pain_points?: string[];
   opportunities?: string[];
   error_message?: string;
+  email_count?: number;
 }
 
 interface LeadsListProps {
@@ -30,9 +32,11 @@ interface LeadsListProps {
 export function LeadsList({ initialLeads, runId }: LeadsListProps) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [emailFinderLead, setEmailFinderLead] = useState<Lead | null>(null);
   const [filterGrade, setFilterGrade] = useState<string>('all');
   const [researchingLeads, setResearchingLeads] = useState<Set<string>>(new Set());
   const [isResearchingAll, setIsResearchingAll] = useState(false);
+  const [emailCounts, setEmailCounts] = useState<Record<string, number>>({});
 
   const handleResearchLead = async (leadId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click
@@ -142,6 +146,24 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
   useEffect(() => {
     const supabase = createClient();
 
+    // Load email counts for all leads
+    const loadEmailCounts = async () => {
+      const { data } = await supabase
+        .from('lead_emails')
+        .select('lead_id')
+        .in('lead_id', leads.map(l => l.id));
+
+      if (data) {
+        const counts: Record<string, number> = {};
+        data.forEach((email) => {
+          counts[email.lead_id] = (counts[email.lead_id] || 0) + 1;
+        });
+        setEmailCounts(counts);
+      }
+    };
+
+    loadEmailCounts();
+
     // Subscribe to real-time updates for leads
     const channel = supabase
       .channel(`leads-${runId}`)
@@ -169,12 +191,24 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
           }
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lead_emails',
+        },
+        () => {
+          // Reload email counts when emails change
+          loadEmailCounts();
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [runId]);
+  }, [runId, leads.length]);
 
   const filteredLeads = leads.filter((lead) => {
     if (filterGrade === 'all') return true;
@@ -289,28 +323,44 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
             <div className="mt-3 flex items-center justify-between">
               <ResearchStatusBadge status={lead.research_status} />
 
-              {/* Individual Research Button */}
-              {lead.research_status === 'pending' && (
-                <button
-                  onClick={(e) => handleResearchLead(lead.id, e)}
-                  disabled={researchingLeads.has(lead.id)}
-                  className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                >
-                  {researchingLeads.has(lead.id) ? 'Starting...' : 'Research'}
-                </button>
-              )}
+              <div className="flex gap-2">
+                {/* Individual Research Button */}
+                {lead.research_status === 'pending' && (
+                  <button
+                    onClick={(e) => handleResearchLead(lead.id, e)}
+                    disabled={researchingLeads.has(lead.id)}
+                    className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {researchingLeads.has(lead.id) ? 'Starting...' : 'Research'}
+                  </button>
+                )}
 
-              {/* Re-Research Button for Completed/Failed */}
-              {(lead.research_status === 'completed' || lead.research_status === 'failed') && (
-                <button
-                  onClick={(e) => handleReResearchLead(lead.id, e)}
-                  disabled={researchingLeads.has(lead.id)}
-                  className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                  title="Re-scrape website and update all data"
-                >
-                  {researchingLeads.has(lead.id) ? 'Re-researching...' : '🔄 Re-research'}
-                </button>
-              )}
+                {/* Re-Research Button for Completed/Failed */}
+                {(lead.research_status === 'completed' || lead.research_status === 'failed') && (
+                  <button
+                    onClick={(e) => handleReResearchLead(lead.id, e)}
+                    disabled={researchingLeads.has(lead.id)}
+                    className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                    title="Re-scrape website and update all data"
+                  >
+                    {researchingLeads.has(lead.id) ? 'Re-researching...' : '🔄 Re-research'}
+                  </button>
+                )}
+
+                {/* Find Emails Button - Show for researched leads with website */}
+                {lead.research_status === 'completed' && lead.website && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEmailFinderLead(lead);
+                    }}
+                    className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 transition-colors flex items-center gap-1"
+                    title="Find business emails"
+                  >
+                    📧 {emailCounts[lead.id] ? `Emails (${emailCounts[lead.id]})` : 'Find Emails'}
+                  </button>
+                )}
+              </div>
             </div>
 
             {lead.error_message && (
@@ -325,6 +375,16 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
         <LeadDetailModal
           lead={selectedLead}
           onClose={() => setSelectedLead(null)}
+        />
+      )}
+
+      {/* Email Finder Modal */}
+      {emailFinderLead && emailFinderLead.website && (
+        <EmailFinderModal
+          leadId={emailFinderLead.id}
+          leadName={emailFinderLead.name}
+          domain={new URL(emailFinderLead.website.startsWith('http') ? emailFinderLead.website : `https://${emailFinderLead.website}`).hostname}
+          onClose={() => setEmailFinderLead(null)}
         />
       )}
     </>
