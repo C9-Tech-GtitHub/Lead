@@ -170,7 +170,7 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
               </div>
             </div>
             <div className="text-xs text-gray-500 mt-2">
-              {run.total_leads} of {run.target_count} leads processed
+              {Math.round((run.progress / 100) * run.total_leads)} of {run.total_leads} leads processed
             </div>
           </>
         )}

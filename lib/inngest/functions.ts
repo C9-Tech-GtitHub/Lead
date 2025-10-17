@@ -631,12 +631,11 @@ export const researchIndividualLead = inngest.createFunction(
     await step.run("check-run-completion", async () => {
       const supabase = createAdminClient();
 
-      // Get total and completed counts
-      const { data: run } = await supabase
-        .from("runs")
-        .select("target_count")
-        .eq("id", runId)
-        .single();
+      // Get total leads count (actual scraped, not target)
+      const { count: totalLeads } = await supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("run_id", runId);
 
       const { count: completedCount } = await supabase
         .from("leads")
@@ -645,7 +644,7 @@ export const researchIndividualLead = inngest.createFunction(
         .in("research_status", ["completed", "failed", "skipped"]);
 
       // If all leads processed, mark run as completed
-      if (completedCount && run && completedCount >= run.target_count) {
+      if (completedCount && totalLeads && completedCount >= totalLeads) {
         await supabase
           .from("runs")
           .update({
