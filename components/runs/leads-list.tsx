@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { LeadDetailModal } from './lead-detail-modal';
 import { EmailFinderModal } from './email-finder-modal';
+import { LinkedInCompanyModal } from './linkedin-company-modal';
 
 interface Lead {
   id: string;
@@ -33,10 +34,12 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
   const [leads, setLeads] = useState<Lead[]>(initialLeads);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [emailFinderLead, setEmailFinderLead] = useState<Lead | null>(null);
+  const [linkedinLead, setLinkedinLead] = useState<Lead | null>(null);
   const [filterGrade, setFilterGrade] = useState<string>('all');
   const [researchingLeads, setResearchingLeads] = useState<Set<string>>(new Set());
   const [isResearchingAll, setIsResearchingAll] = useState(false);
   const [emailCounts, setEmailCounts] = useState<Record<string, number>>({});
+  const [linkedinPeopleCounts, setLinkedinPeopleCounts] = useState<Record<string, number>>({});
 
   const handleResearchLead = async (leadId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click
@@ -93,6 +96,58 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
       setResearchingLeads(prev => {
         const newSet = new Set(prev);
         newSet.delete(leadId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleLinkedInResearch = async (lead: Lead, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+
+    const linkedinKey = `linkedin-${lead.id}`;
+
+    // If already has data, open modal to view
+    if (linkedinPeopleCounts[lead.id] > 0) {
+      setLinkedinLead(lead);
+      return;
+    }
+
+    setResearchingLeads(prev => new Set(prev).add(linkedinKey));
+
+    try {
+      const response = await fetch('/api/linkedin/scrape-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: lead.id,
+          companyName: lead.name,
+          website: lead.website,
+          autoDetect: true
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to scrape LinkedIn');
+      }
+
+      // Show success message with found ID
+      console.log('LinkedIn scraping successful:', data);
+
+      // Open modal to show results
+      setLinkedinLead(lead);
+
+    } catch (error: any) {
+      console.error('Error scraping LinkedIn:', error);
+      alert(`Failed to find LinkedIn company profile. ${error.message || 'Please try again or enter the company ID manually.'}`);
+
+      // Open modal anyway so user can manually enter ID
+      setLinkedinLead(lead);
+    } finally {
+      setResearchingLeads(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(linkedinKey);
         return newSet;
       });
     }
@@ -162,7 +217,24 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
       }
     };
 
+    // Load LinkedIn people counts for all leads
+    const loadLinkedinCounts = async () => {
+      const { data } = await supabase
+        .from('lead_linkedin_people')
+        .select('lead_id')
+        .in('lead_id', leads.map(l => l.id));
+
+      if (data) {
+        const counts: Record<string, number> = {};
+        data.forEach((person) => {
+          counts[person.lead_id] = (counts[person.lead_id] || 0) + 1;
+        });
+        setLinkedinPeopleCounts(counts);
+      }
+    };
+
     loadEmailCounts();
+    loadLinkedinCounts();
 
     // Subscribe to real-time updates for leads
     const channel = supabase
@@ -201,6 +273,18 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
         () => {
           // Reload email counts when emails change
           loadEmailCounts();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'lead_linkedin_people',
+        },
+        () => {
+          // Reload LinkedIn counts when people change
+          loadLinkedinCounts();
         }
       )
       .subscribe();
@@ -360,6 +444,24 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
                     📧 {emailCounts[lead.id] ? `Emails (${emailCounts[lead.id]})` : 'Find Emails'}
                   </button>
                 )}
+
+                {/* LinkedIn Company Research Button */}
+                {lead.research_status === 'completed' && (
+                  <button
+                    onClick={(e) => handleLinkedInResearch(lead, e)}
+                    disabled={researchingLeads.has(`linkedin-${lead.id}`)}
+                    className="px-3 py-1 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                    title="Research company structure on LinkedIn"
+                  >
+                    {researchingLeads.has(`linkedin-${lead.id}`) ? (
+                      '🔄 Scraping...'
+                    ) : linkedinPeopleCounts[lead.id] ? (
+                      `💼 Team (${linkedinPeopleCounts[lead.id]})`
+                    ) : (
+                      '💼 LinkedIn'
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -385,6 +487,15 @@ export function LeadsList({ initialLeads, runId }: LeadsListProps) {
           leadName={emailFinderLead.name}
           domain={new URL(emailFinderLead.website.startsWith('http') ? emailFinderLead.website : `https://${emailFinderLead.website}`).hostname}
           onClose={() => setEmailFinderLead(null)}
+        />
+      )}
+
+      {/* LinkedIn Company Research Modal */}
+      {linkedinLead && (
+        <LinkedInCompanyModal
+          leadId={linkedinLead.id}
+          leadName={linkedinLead.name}
+          onClose={() => setLinkedinLead(null)}
         />
       )}
     </>

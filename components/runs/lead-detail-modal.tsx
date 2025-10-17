@@ -36,6 +36,8 @@ interface LeadDetailModalProps {
 
 export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
   const [emails, setEmails] = useState<any[]>([]);
+  const [linkedinPeople, setLinkedinPeople] = useState<any[]>([]);
+  const [linkedinCompanyData, setLinkedinCompanyData] = useState<any>(null);
 
   useEffect(() => {
     const loadEmails = async () => {
@@ -51,7 +53,34 @@ export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
       }
     };
 
+    const loadLinkedinData = async () => {
+      const supabase = createClient();
+
+      // Load LinkedIn people
+      const { data: peopleData } = await supabase
+        .from('lead_linkedin_people')
+        .select('*')
+        .eq('lead_id', lead.id)
+        .order('full_name', { ascending: true });
+
+      if (peopleData) {
+        setLinkedinPeople(peopleData);
+      }
+
+      // Load company data from lead
+      const { data: leadData } = await supabase
+        .from('leads')
+        .select('linkedin_company_data')
+        .eq('id', lead.id)
+        .single();
+
+      if (leadData?.linkedin_company_data) {
+        setLinkedinCompanyData(leadData.linkedin_company_data);
+      }
+    };
+
     loadEmails();
+    loadLinkedinData();
   }, [lead.id]);
 
   const seoSummary = useMemo(
@@ -252,6 +281,72 @@ export function LeadDetailModal({ lead, onClose }: LeadDetailModalProps) {
                         )}
                       </div>
                     )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* LinkedIn Company Structure */}
+          {linkedinPeople.length > 0 && (
+            <section>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                Team Structure ({linkedinPeople.length} people from LinkedIn)
+              </h3>
+              {linkedinCompanyData && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
+                  <p className="text-xs font-semibold text-blue-700">Company Info</p>
+                  <div className="grid grid-cols-2 gap-2 mt-1 text-xs">
+                    {linkedinCompanyData.industry && (
+                      <div>
+                        <span className="text-blue-600">Industry:</span>{' '}
+                        <span className="text-blue-900">{linkedinCompanyData.industry}</span>
+                      </div>
+                    )}
+                    {linkedinCompanyData.companySize && (
+                      <div>
+                        <span className="text-blue-600">Size:</span>{' '}
+                        <span className="text-blue-900">{linkedinCompanyData.companySize}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="grid gap-2 md:grid-cols-2">
+                {linkedinPeople.map((person) => (
+                  <div
+                    key={person.id}
+                    className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm transition-shadow"
+                  >
+                    <div className="flex gap-2">
+                      {person.profile_image_url && (
+                        <img
+                          src={person.profile_image_url}
+                          alt={person.full_name}
+                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h5 className="font-semibold text-gray-900 text-sm truncate">
+                          {person.full_name}
+                        </h5>
+                        {(person.position || person.headline) && (
+                          <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">
+                            {person.position || person.headline}
+                          </p>
+                        )}
+                        {person.linkedin_profile_url && (
+                          <a
+                            href={person.linkedin_profile_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-600 hover:text-blue-800 mt-1 inline-block"
+                          >
+                            View LinkedIn →
+                          </a>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
