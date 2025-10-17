@@ -6,12 +6,20 @@ import { createRun } from "@/lib/actions/create-run";
 
 interface CreateRunModalProps {
   onClose: () => void;
+  initialBusinessType?: string;
+  initialLocation?: string;
+  initialTargetCount?: number;
 }
 
-export function CreateRunModal({ onClose }: CreateRunModalProps) {
-  const [businessType, setBusinessType] = useState("Camping & Hiking Gear");
-  const [location, setLocation] = useState("");
-  const [targetCount, setTargetCount] = useState(100);
+export function CreateRunModal({
+  onClose,
+  initialBusinessType,
+  initialLocation,
+  initialTargetCount
+}: CreateRunModalProps) {
+  const [businessTypes, setBusinessTypes] = useState(initialBusinessType || "Camping & Hiking Gear");
+  const [location, setLocation] = useState(initialLocation || "");
+  const [targetCount, setTargetCount] = useState(initialTargetCount || 100);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -22,9 +30,21 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
     setError(null);
 
     try {
+      // Parse comma-separated business types
+      const businessTypesArray = businessTypes
+        .split(",")
+        .map((type) => type.trim())
+        .filter((type) => type.length > 0);
+
+      if (businessTypesArray.length === 0) {
+        setError("Please enter at least one business type");
+        setLoading(false);
+        return;
+      }
+
       // Call the server action to create run and trigger Inngest workflow
       await createRun({
-        businessType,
+        businessTypes: businessTypesArray,
         location,
         targetCount,
       });
@@ -69,22 +89,22 @@ export function CreateRunModal({ onClose }: CreateRunModalProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label
-              htmlFor="businessType"
+              htmlFor="businessTypes"
               className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Business Type
+              Business Type(s)
             </label>
             <input
-              id="businessType"
+              id="businessTypes"
               type="text"
               required
-              value={businessType}
-              onChange={(e) => setBusinessType(e.target.value)}
+              value={businessTypes}
+              onChange={(e) => setBusinessTypes(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              placeholder="e.g., realtors, dentists, law firms"
+              placeholder="e.g., Artificial Grass, Fake Turf, Synthetic Lawn"
             />
             <p className="mt-1 text-xs text-gray-500">
-              What type of business are you searching for?
+              Enter one or more search queries separated by commas. Multiple queries will be searched and deduplicated.
             </p>
           </div>
 

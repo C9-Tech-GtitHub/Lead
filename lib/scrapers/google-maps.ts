@@ -81,6 +81,27 @@ export async function scrapeGoogleMaps({
 
     if (data.search_results && Array.isArray(data.search_results)) {
       for (const result of data.search_results.slice(0, limit)) {
+        // Skip permanently closed businesses
+        const openState = result.open_state || result.hours || '';
+        if (openState.toLowerCase().includes('permanently closed')) {
+          console.log(`[Google Maps Scraper] Skipping permanently closed business: ${result.title || result.name}`);
+          continue;
+        }
+
+        // Skip temporarily closed businesses (optional - you can remove this if you want to include them)
+        if (openState.toLowerCase().includes('temporarily closed')) {
+          console.log(`[Google Maps Scraper] Skipping temporarily closed business: ${result.title || result.name}`);
+          continue;
+        }
+
+        // Filter out non-Australian results (sometimes Google Maps returns irrelevant locations)
+        const address = result.address || '';
+        if (address && !address.toLowerCase().includes('australia') &&
+            !address.match(/\b(NSW|VIC|QLD|SA|WA|TAS|NT|ACT)\b/i)) {
+          console.log(`[Google Maps Scraper] Skipping non-Australian business: ${result.title || result.name} (${address})`);
+          continue;
+        }
+
         results.push({
           name: result.title || result.name || 'Unknown Business',
           address: result.address || undefined,

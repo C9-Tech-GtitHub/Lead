@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "migrate": "NEXT_PUBLIC_SUPABASE_URL=https://rnbqqwmbblykvriitgxf.supabase.co SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJuYnFxd21iYmx5a3ZyaWl0Z3hmIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MDU1OTQxMSwiZXhwIjoyMDc2MTM1NDExfQ.XjnBOVzVigKu5chbog08Ja9bVJW2fm3bWW7H4a_8Dl4 npx tsx scripts/run-migration.ts"
   },
   "dependencies": {
     "@react-leaflet/core": "^2.1.0",

@@ -27,7 +27,11 @@ export const processLeadRun = inngest.createFunction(
   },
   { event: "lead/run.created" },
   async ({ event, step }) => {
-    const { runId, userId, businessType, location, targetCount } = event.data;
+    const { runId, userId, businessTypes, location, targetCount } = event.data;
+
+    // For backward compatibility, handle both businessTypes (array) and businessType (string)
+    const queries = businessTypes || (event.data.businessType ? [event.data.businessType] : []);
+    const businessTypeDisplay = queries.join(", ");
 
     // Step 1: Update run status to scraping
     await step.run("update-run-status-scraping", async () => {
@@ -44,86 +48,157 @@ export const processLeadRun = inngest.createFunction(
         runId,
         userId,
         eventType: "run_started",
-        message: `Started research run for ${businessType} in ${location}`,
-        details: { targetCount, businessType, location },
+        message: `Started research run for ${businessTypeDisplay} in ${location}`,
+        details: { targetCount, businessTypes: queries, location },
       });
     });
 
-    // Step 2: Scrape Google Maps for businesses (with suburb support)
+    // Step 2: Scrape Google Maps for businesses (with suburb support and multi-query)
     const businesses = await step.run("scrape-google-maps", async () => {
       await logProgress({
         runId,
         userId,
         eventType: "scraping_started",
-        message: `Searching Google Maps for ${businessType} businesses in ${location}`,
+        message: `Searching Google Maps for ${businessTypeDisplay} businesses in ${location}`,
+        details: { queries: queries, queryCount: queries.length },
       });
 
-      let results;
+      // Track unique businesses across all queries using place_id
+      const seenPlaceIds = new Set<string>();
+      const allResults: any[] = [];
 
       // Check if location supports multi-suburb search
       const suburbConfig = getSuburbConfig(location);
 
-      if (suburbConfig) {
-        // Use city-search service for supported cities
-        console.log(`[Process Run] Using multi-suburb search for ${location}`);
+      // Calculate per-suburb limit
+      const perSuburbLimit =
+        targetCount >= 1500
+          ? 80
+          : targetCount >= 800
+            ? 60
+            : targetCount >= 300
+              ? 45
+              : targetCount >= 150
+                ? 40
+                : targetCount >= 100
+                  ? 30
+                  : 20;
 
-        const perSuburbLimit =
-          targetCount >= 1500
-            ? 80
-            : targetCount >= 800
-              ? 60
-              : targetCount >= 300
-                ? 45
-                : targetCount >= 150
-                  ? 40
-                  : targetCount >= 100
-                    ? 30
-                    : 20;
+      // Search for each query
+      for (let i = 0; i < queries.length; i++) {
+        const query = queries[i];
 
         await logProgress({
           runId,
           userId,
-          eventType: "scraping_started",
-          message: `Using multi-suburb search across ${suburbConfig.suburbs.length} suburbs in ${location}`,
-          details: {
-            suburbCount: suburbConfig.suburbs.length,
+          eventType: "scraping_query",
+          message: `Searching for "${query}" (${i + 1}/${queries.length})`,
+          details: { query, queryIndex: i + 1, totalQueries: queries.length },
+        });
+
+        let queryResults;
+
+        if (suburbConfig) {
+          // Use city-search service for supported cities
+          console.log(`[Process Run] Multi-suburb search for "${query}" in ${location}`);
+
+          await logProgress({
+            runId,
+            userId,
+            eventType: "scraping_suburbs",
+            message: `Searching ${suburbConfig.suburbs.length} suburbs for "${query}"`,
+            details: {
+              query,
+              suburbCount: suburbConfig.suburbs.length,
+              perSuburbLimit,
+            },
+          });
+
+          queryResults = await searchCity({
+            query: query,
+            config: suburbConfig,
+            limit: targetCount, // Allow each query to find up to target
             perSuburbLimit,
-            targetCount,
+            mode: "hybrid",
+          });
+        } else {
+          // Fall back to regular single-location search
+          console.log(`[Process Run] Single-location search for "${query}" in ${location}`);
+
+          const rawResults = await scrapeGoogleMaps({
+            query: query,
+            location: location,
+            limit: targetCount,
+          });
+
+          // Convert to SearchResult format for consistent deduplication
+          queryResults = rawResults.map((r: any) => ({
+            place_id: r.place_id || r.data_id || `coord_${r.latitude}_${r.longitude}`,
+            name: r.name,
+            address: r.address,
+            phone: r.phone,
+            website: r.website,
+            latitude: r.latitude,
+            longitude: r.longitude,
+          }));
+        }
+
+        // Add only unique results from this query
+        let newCount = 0;
+        for (const result of queryResults) {
+          const placeId = result.place_id || `coord_${result.latitude}_${result.longitude}`;
+
+          if (placeId && !seenPlaceIds.has(placeId)) {
+            seenPlaceIds.add(placeId);
+            allResults.push(result);
+            newCount++;
+
+            // Stop if we've reached the target count
+            if (allResults.length >= targetCount) break;
+          }
+        }
+
+        console.log(`[Process Run] Query "${query}": Found ${newCount} new businesses (${queryResults.length} total, ${queryResults.length - newCount} duplicates)`);
+
+        await logProgress({
+          runId,
+          userId,
+          eventType: "scraping_query_completed",
+          message: `Query "${query}": ${newCount} new businesses (${queryResults.length - newCount} duplicates)`,
+          details: {
+            query,
+            newCount,
+            totalCount: queryResults.length,
+            duplicateCount: queryResults.length - newCount,
+            totalUnique: allResults.length,
           },
         });
 
-        const searchResults = await searchCity({
-          query: businessType,
-          config: suburbConfig,
-          limit: targetCount,
-          perSuburbLimit,
-          mode: "hybrid", // City-wide + suburbs for best coverage
-        });
-
-        // Convert to GoogleMapsResult format
-        results = searchResults.map((result) => ({
-          name: result.name,
-          address: result.address,
-          phone: result.phone,
-          website: result.website,
-          latitude: result.latitude,
-          longitude: result.longitude,
-          url:
-            result.latitude && result.longitude
-              ? `https://www.google.com/maps/search/?api=1&query=${result.latitude},${result.longitude}`
-              : undefined,
-        }));
-      } else {
-        // Fall back to regular single-location search
-        console.log(
-          `[Process Run] Using single-location search for ${location}`,
-        );
-        results = await scrapeGoogleMaps({
-          query: businessType,
-          location: location,
-          limit: targetCount,
-        });
+        // Stop searching if we've reached the target
+        if (allResults.length >= targetCount) {
+          await logProgress({
+            runId,
+            userId,
+            eventType: "scraping_target_reached",
+            message: `Target of ${targetCount} leads reached after ${i + 1} queries`,
+          });
+          break;
+        }
       }
+
+      // Convert to GoogleMapsResult format
+      const results = allResults.slice(0, targetCount).map((result) => ({
+        name: result.name,
+        address: result.address,
+        phone: result.phone,
+        website: result.website,
+        latitude: result.latitude,
+        longitude: result.longitude,
+        url:
+          result.latitude && result.longitude
+            ? `https://www.google.com/maps/search/?api=1&query=${result.latitude},${result.longitude}`
+            : undefined,
+      }));
 
       await logProgress({
         runId,
@@ -171,6 +246,15 @@ export const processLeadRun = inngest.createFunction(
       return data;
     });
 
+    // Step 3.5: Update status to prescreening
+    await step.run("update-status-prescreening", async () => {
+      const supabase = createAdminClient();
+      await supabase
+        .from("runs")
+        .update({ status: "prescreening" })
+        .eq("id", runId);
+    });
+
     // Step 4: Prescreen leads to identify franchises
     const prescreenResults = await step.run("prescreen-leads", async () => {
       const supabase = createAdminClient();
@@ -197,10 +281,10 @@ export const processLeadRun = inngest.createFunction(
         name: lead.name,
         address: lead.address || undefined,
         website: lead.website || undefined,
-        businessType: businessType,
+        businessType: businessTypeDisplay, // Use the display string with all business types
       }));
 
-      const results = await prescreenLeadsBatch(prescreenParams, 10);
+      const results = await prescreenLeadsBatch(prescreenParams);
 
       let skippedCount = 0;
       let toResearchCount = 0;
@@ -320,12 +404,30 @@ export const researchIndividualLead = inngest.createFunction(
     name: "Research Individual Lead",
     retries: 2,
     concurrency: {
-      limit: 5, // Process 5 leads at a time
+      limit: 15, // Process 15 leads at a time (balanced for API limits and speed)
     },
+    // Rate limiting removed - concurrency control is sufficient
+    // The 15 concurrent limit naturally throttles requests without dropping events
   },
   { event: "lead/research.triggered" },
   async ({ event, step }) => {
     const { leadId, runId } = event.data;
+
+    // Step 0: Check if run is paused
+    const isPaused = await step.run("check-if-paused", async () => {
+      const supabase = createAdminClient();
+      const { data: run } = await supabase
+        .from("runs")
+        .select("is_paused")
+        .eq("id", runId)
+        .single();
+      return run?.is_paused ?? false;
+    });
+
+    if (isPaused) {
+      console.log(`[Research] Run ${runId} is paused, skipping lead ${leadId}`);
+      return { success: false, reason: "run-paused" };
+    }
 
     // Step 1: Fetch lead details
     const lead = await step.run("fetch-lead", async () => {
@@ -438,9 +540,30 @@ export const researchIndividualLead = inngest.createFunction(
       });
     });
 
-    // Step 4: Scrape website content
+    // Step 4: Scrape website content (with timeout protection)
     const websiteData = await step.run("scrape-website", async () => {
-      return await scrapeWebsite(websiteUrl);
+      try {
+        // Add timeout protection for scraping (30 seconds max)
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Website scraping timeout")), 30000)
+        );
+
+        const scrapePromise = scrapeWebsite(websiteUrl);
+
+        return await Promise.race([scrapePromise, timeoutPromise]) as Awaited<ReturnType<typeof scrapeWebsite>>;
+      } catch (error) {
+        console.error(`[Research] Scraping failed for ${lead.name}:`, error);
+        // Return minimal data if scraping fails
+        return {
+          mainContent: "",
+          aboutContent: null,
+          teamContent: null,
+          hasMultipleLocations: false,
+          teamSize: null,
+          abn: null,
+          abnData: null,
+        };
+      }
     });
 
     // Step 4: Update status to analyzing
@@ -519,7 +642,7 @@ export const researchIndividualLead = inngest.createFunction(
         .from("leads")
         .select("id", { count: "exact", head: true })
         .eq("run_id", runId)
-        .in("research_status", ["completed", "failed"]);
+        .in("research_status", ["completed", "failed", "skipped"]);
 
       // If all leads processed, mark run as completed
       if (completedCount && run && completedCount >= run.target_count) {
@@ -608,19 +731,50 @@ export const triggerResearchAll = inngest.createFunction(
     });
 
     // Step 3: Fan out to individual lead processing
+    // For large batches (200+), send events in smaller chunks to avoid timeouts
     if (leads.length > 0) {
-      await step.sendEvent(
-        "trigger-lead-research",
-        leads.map((lead) => ({
-          name: "lead/research.triggered",
-          data: {
-            leadId: lead.id,
-            runId: runId,
-          },
-        })),
-      );
+      const BATCH_SIZE = 100; // Send 100 events at a time
+      const batches = [];
 
-      return { success: true, leadsTriggered: leads.length };
+      for (let i = 0; i < leads.length; i += BATCH_SIZE) {
+        batches.push(leads.slice(i, i + BATCH_SIZE));
+      }
+
+      // Send batches sequentially to avoid overwhelming the system
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i];
+        await step.sendEvent(
+          `trigger-lead-research-batch-${i + 1}`,
+          batch.map((lead) => ({
+            name: "lead/research.triggered",
+            data: {
+              leadId: lead.id,
+              runId: runId,
+            },
+          })),
+        );
+
+        // Log progress for large batches
+        if (leads.length > 50) {
+          const supabase = createAdminClient();
+          const { data: run } = await supabase
+            .from("runs")
+            .select("user_id")
+            .eq("id", runId)
+            .single();
+
+          if (run) {
+            await logProgress({
+              runId,
+              userId: run.user_id,
+              eventType: "status_update",
+              message: `Queued ${Math.min((i + 1) * BATCH_SIZE, leads.length)}/${leads.length} leads for research...`,
+            });
+          }
+        }
+      }
+
+      return { success: true, leadsTriggered: leads.length, batches: batches.length };
     } else {
       return { success: false, reason: "no-pending-leads", leadsTriggered: 0 };
     }
@@ -729,7 +883,7 @@ export const triggerPrescreen = inngest.createFunction(
         businessType: businessType,
       }));
 
-      const results = await prescreenLeadsBatch(prescreenParams, 10);
+      const results = await prescreenLeadsBatch(prescreenParams);
 
       let skippedCount = 0;
       let toResearchCount = 0;

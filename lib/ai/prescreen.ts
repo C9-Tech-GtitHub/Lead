@@ -198,26 +198,181 @@ function parsePrescreenResponse(
 }
 
 /**
- * Batch prescreen multiple leads
- * Processes leads in parallel for efficiency
+ * Batch prescreen multiple leads in a single API call
+ * Much more efficient - sends all business names at once
  */
 export async function prescreenLeadsBatch(
   leads: PrescreenParams[],
-  concurrency: number = 10,
 ): Promise<Map<string, PrescreenResult>> {
   const results = new Map<string, PrescreenResult>();
 
-  // Process in batches
-  for (let i = 0; i < leads.length; i += concurrency) {
-    const batch = leads.slice(i, i + concurrency);
-    const batchResults = await Promise.all(
-      batch.map((lead) => prescreenLead(lead)),
-    );
-
-    batch.forEach((lead, index) => {
-      results.set(lead.name, batchResults[index]);
-    });
+  if (leads.length === 0) {
+    return results;
   }
 
-  return results;
+  try {
+    console.log(`[Prescreen] Batch screening ${leads.length} businesses...`);
+
+    // Build a single prompt with all business names
+    const businessType = leads[0]?.businessType || "business";
+    const businessList = leads
+      .map((lead, index) => `${index + 1}. ${lead.name}`)
+      .join("\n");
+
+    const prompt = `You are screening ${leads.length} ${businessType} businesses to identify franchises and national brands.
+
+For each business below, determine if it's a franchise/chain (SKIP) or an independent local business (RESEARCH).
+
+Business names:
+${businessList}
+
+For each business, respond with ONE line in this exact format:
+[NUMBER]. [BUSINESS_NAME] | [SKIP/RESEARCH] | [YES/NO for franchise] | [YES/NO for national brand] | [HIGH/MEDIUM/LOW confidence] | [Brief reason]
+
+Example:
+1. Macpac Melbourne | SKIP | YES | YES | HIGH | National outdoor gear franchise
+2. Joe's Local Cafe | RESEARCH | NO | NO | HIGH | Independent local business
+
+Known franchises/chains to SKIP: Macpac, Kathmandu, Rebel Sport, Anaconda, BCF, McDonald's, Subway, KFC, Starbucks, 7-Eleven, Ray White, LJ Hooker, banks, telcos, national retail chains.
+
+Independent businesses to RESEARCH: Unique local names, single locations, owner-operated businesses.
+
+Provide your classification for all ${leads.length} businesses:`;
+
+    // Make single API call
+    const response = await openai.responses.create({
+      model: "gpt-5",
+      reasoning: { effort: "low" },
+      max_output_tokens: leads.length * 100 + 500, // Scale with number of leads
+      input: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
+
+    const content = response.output_text;
+
+    if (!content) {
+      // If no response, default to allowing research for all (fail open)
+      console.warn("[Prescreen] No response from API, allowing all research");
+      leads.forEach((lead) => {
+        results.set(lead.name, {
+          shouldResearch: true,
+          reason: "Prescreen failed - proceeding with research",
+          isFranchise: false,
+          isNationalBrand: false,
+          confidence: "low",
+        });
+      });
+      return results;
+    }
+
+    // Parse batch response
+    const lines = content.split("\n").filter((line) => line.trim());
+
+    for (const line of lines) {
+      // Match format: "1. Business Name | SKIP/RESEARCH | YES/NO | YES/NO | HIGH/MEDIUM/LOW | Reason"
+      const match = line.match(
+        /^\d+\.\s*(.+?)\s*\|\s*(SKIP|RESEARCH)\s*\|\s*(YES|NO)\s*\|\s*(YES|NO)\s*\|\s*(HIGH|MEDIUM|LOW)\s*\|\s*(.+)$/i,
+      );
+
+      if (match) {
+        const [
+          ,
+          businessName,
+          decision,
+          franchise,
+          nationalBrand,
+          conf,
+          reason,
+        ] = match;
+
+        // Find the matching lead (case-insensitive, partial match)
+        const lead = leads.find((l) => {
+          const leadName = l.name.toLowerCase().trim();
+          const parsedName = businessName.toLowerCase().trim();
+          // Try exact match first
+          if (leadName === parsedName) return true;
+          // Try partial match (for cases where GPT-5 shortens the name)
+          if (leadName.includes(parsedName) || parsedName.includes(leadName)) return true;
+          return false;
+        });
+
+        if (lead) {
+          results.set(lead.name, {
+            shouldResearch: decision.toUpperCase() === "RESEARCH",
+            isFranchise: franchise.toUpperCase() === "YES",
+            isNationalBrand: nationalBrand.toUpperCase() === "YES",
+            confidence: conf.toLowerCase() as "high" | "medium" | "low",
+            reason: reason.trim(),
+          });
+        }
+      }
+    }
+
+    // For any leads not matched, apply fallback pattern matching for known franchises
+    leads.forEach((lead) => {
+      if (!results.has(lead.name)) {
+        // Check if the name contains known franchise/chain keywords
+        const knownChains = [
+          'macpac', 'kathmandu', 'rebel', 'anaconda', 'bcf', 'rays outdoors',
+          'mountain designs', 'fjallraven', 'patagonia', 'the north face',
+          'mcdonalds', 'subway', 'kfc', 'starbucks', '7-eleven', '7 eleven',
+          'ray white', 'lj hooker', 'century 21', 'harcourts',
+          'commonwealth bank', 'westpac', 'anz', 'nab', 'telstra', 'optus', 'vodafone'
+        ];
+
+        const lowerName = lead.name.toLowerCase();
+        const matchedChain = knownChains.find(chain => lowerName.includes(chain));
+
+        if (matchedChain) {
+          console.warn(
+            `[Prescreen] ${lead.name} matched known chain pattern "${matchedChain}" - marking as SKIP`,
+          );
+          results.set(lead.name, {
+            shouldResearch: false,
+            reason: `Known franchise/chain detected: ${matchedChain}`,
+            isFranchise: true,
+            isNationalBrand: true,
+            confidence: "high",
+          });
+        } else {
+          console.warn(
+            `[Prescreen] No result for ${lead.name}, defaulting to research`,
+          );
+          results.set(lead.name, {
+            shouldResearch: true,
+            reason: "Not classified - proceeding with research",
+            isFranchise: false,
+            isNationalBrand: false,
+            confidence: "low",
+          });
+        }
+      }
+    });
+
+    const skipCount = Array.from(results.values()).filter(
+      (r) => !r.shouldResearch,
+    ).length;
+    console.log(
+      `[Prescreen] Batch complete: ${results.size - skipCount} to research, ${skipCount} franchises skipped`,
+    );
+
+    return results;
+  } catch (error) {
+    console.error("[Prescreen] Batch error:", error);
+    // On error, default to allowing research for all (fail open)
+    leads.forEach((lead) => {
+      results.set(lead.name, {
+        shouldResearch: true,
+        reason: "Prescreen error - proceeding with research",
+        isFranchise: false,
+        isNationalBrand: false,
+        confidence: "low",
+      });
+    });
+    return results;
+  }
 }

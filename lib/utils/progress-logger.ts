@@ -2,6 +2,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 
 export type ProgressEventType =
   | 'run_started'
+  | 'run_paused'
+  | 'run_resumed'
+  | 'run_restarted'
   | 'scraping_started'
   | 'scraping_completed'
   | 'lead_created'

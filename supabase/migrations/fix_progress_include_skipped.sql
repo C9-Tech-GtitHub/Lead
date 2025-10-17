@@ -1,5 +1,5 @@
--- Fix progress calculation to include failed leads
--- This ensures progress reaches 100% when all leads are processed (completed or failed)
+-- Fix progress calculation to include skipped leads (prescreened as franchises)
+-- This ensures progress bar moves when leads are prescreened as F and marked as skipped
 
 CREATE OR REPLACE FUNCTION update_run_stats()
 RETURNS TRIGGER AS $$
@@ -25,6 +25,7 @@ BEGIN
       SELECT COUNT(*) FROM leads WHERE run_id = NEW.run_id AND compatibility_grade = 'F'
     ),
     progress = LEAST(100, ROUND(
+      -- Include 'skipped' status for prescreened franchises
       (SELECT COUNT(*) FROM leads WHERE run_id = NEW.run_id AND research_status IN ('completed', 'failed', 'skipped'))::NUMERIC /
       (SELECT target_count FROM runs WHERE id = NEW.run_id)::NUMERIC * 100
     ))

@@ -4,13 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { inngest } from "@/lib/inngest/client";
 
 interface CreateRunParams {
-  businessType: string;
+  businessTypes: string[];
   location: string;
   targetCount: number;
 }
 
 export async function createRun({
-  businessType,
+  businessTypes,
   location,
   targetCount,
 }: CreateRunParams) {
@@ -32,17 +32,22 @@ export async function createRun({
     }
 
     console.log("[createRun] Creating run for user:", user.id, {
-      businessType,
+      businessTypes,
       location,
       targetCount: sanitizedTargetCount,
     });
+
+    // Create display string for backward compatibility
+    const businessTypeDisplay = businessTypes.join(", ");
 
     // Create the run in the database
     const { data: run, error: createError } = await supabase
       .from("runs")
       .insert({
         user_id: user.id,
-        business_type: businessType,
+        business_type: businessTypeDisplay, // Display string for UI
+        business_types: businessTypes, // Array for search logic
+        queries_count: businessTypes.length,
         location: location,
         target_count: sanitizedTargetCount,
         status: "pending",
@@ -68,7 +73,7 @@ export async function createRun({
         data: {
           runId: run.id,
           userId: user.id,
-          businessType,
+          businessTypes,
           location,
           targetCount: sanitizedTargetCount,
         },
