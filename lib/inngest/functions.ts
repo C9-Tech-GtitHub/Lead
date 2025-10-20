@@ -427,10 +427,10 @@ export const researchIndividualLead = inngest.createFunction(
     name: "Research Individual Lead",
     retries: 2,
     concurrency: {
-      limit: 15, // Process 15 leads at a time (balanced for API limits and speed)
+      limit: 5, // Process 5 leads at a time (matches Inngest plan limit)
     },
     // Rate limiting removed - concurrency control is sufficient
-    // The 15 concurrent limit naturally throttles requests without dropping events
+    // The 5 concurrent limit naturally throttles requests without dropping events
   },
   { event: "lead/research.triggered" },
   async ({ event, step }) => {
