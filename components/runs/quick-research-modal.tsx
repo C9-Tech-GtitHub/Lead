@@ -128,7 +128,7 @@ export function QuickResearchModal({
                   </div>
                   <div className="text-xs text-orange-700 mt-0.5">
                     Auto-reject national brands, franchises, and multinational
-                    chains. Uncheck if you're okay with larger businesses.
+                    chains. Uncheck if you&apos;re okay with larger businesses.
                   </div>
                 </div>
               </label>
@@ -206,8 +206,8 @@ export function QuickResearchModal({
               rows={4}
             />
             <p className="text-xs text-gray-500 mt-1">
-              Example: "Pay special attention to their service pricing", "Focus
-              on their local SEO signals"
+              Example: &quot;Pay special attention to their service
+              pricing&quot;, &quot;Focus on their local SEO signals&quot;
             </p>
           </div>
         </div>
