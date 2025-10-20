@@ -627,10 +627,10 @@ export const researchIndividualLead = inngest.createFunction(
             name: lead.name,
             website: websiteUrl,
             websiteContent: websiteData.mainContent,
-            aboutContent: websiteData.aboutContent,
-            teamContent: websiteData.teamContent,
+            aboutContent: websiteData.aboutContent ?? undefined,
+            teamContent: websiteData.teamContent ?? undefined,
             hasMultipleLocations: websiteData.hasMultipleLocations,
-            teamSize: websiteData.teamSize,
+            teamSize: websiteData.teamSize ?? undefined,
             businessType: runDetails.business_type ?? lead.business_type ?? "",
             config: config || undefined,
           });

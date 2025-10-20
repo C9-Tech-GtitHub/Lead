@@ -105,7 +105,7 @@ export async function scrapeWebsite(url: string): Promise<WebsiteData> {
       teamContent,
       hasMultipleLocations: analysis.hasMultipleLocations,
       teamSize: analysis.teamSize,
-      abn,
+      abn: abn ?? undefined,
       abnData,
     };
   } catch (error) {

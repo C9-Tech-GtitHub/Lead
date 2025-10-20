@@ -31,7 +31,7 @@ function stripTrackingParams(rawUrl: string): string {
   try {
     const url = new URL(rawUrl);
 
-    [...url.searchParams.keys()].forEach((key) => {
+    Array.from(url.searchParams.keys()).forEach((key) => {
       if (TRACKING_PARAMS.has(key.toLowerCase())) {
         url.searchParams.delete(key);
       }
