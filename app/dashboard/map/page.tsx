@@ -1,9 +1,9 @@
-import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
-import { DashboardHeader } from '@/components/dashboard/header';
-import { LeadsMapWithSidebar } from '@/components/map/leads-map-with-sidebar';
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { DashboardHeader } from "@/components/dashboard/header";
+import { LeadsMapWithSidebar } from "@/components/map/leads-map-with-sidebar";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 export default async function MapPage() {
   const supabase = await createClient();
@@ -14,20 +14,20 @@ export default async function MapPage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect('/auth/login');
+    redirect("/auth/login");
   }
 
-  // Fetch all runs for this user
+  // Fetch all runs (shared across all users)
   const { data: runs, error: runsError } = await supabase
-    .from('runs')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    .from("runs")
+    .select("*")
+    .order("created_at", { ascending: false });
 
-  // Fetch all leads for this user with full details
+  // Fetch all leads (shared across all users) with full details
   const { data: leads, error: leadsError } = await supabase
-    .from('leads')
-    .select(`
+    .from("leads")
+    .select(
+      `
       id,
       name,
       address,
@@ -47,12 +47,12 @@ export default async function MapPage() {
       pain_points,
       opportunities,
       created_at
-    `)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false });
+    `,
+    )
+    .order("created_at", { ascending: false });
 
   if (leadsError) {
-    console.error('Error fetching leads:', leadsError);
+    console.error("Error fetching leads:", leadsError);
     return (
       <div className="min-h-screen bg-gray-50">
         <DashboardHeader />

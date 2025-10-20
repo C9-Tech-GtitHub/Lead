@@ -1,30 +1,49 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function checkRuns() {
-  const { data: runs } = await supabase
-    .from('runs')
-    .select('*')
-    .order('created_at', { ascending: false })
-    .limit(2);
+  console.log("Checking runs in Supabase...\n");
 
-  console.log('Recent runs:');
-  console.log(JSON.stringify(runs, null, 2));
+  // Get all runs
+  const { data: runs, error } = await supabase
+    .from("runs")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error fetching runs:", error);
+    return;
+  }
+
+  console.log(`Total runs: ${runs?.length || 0}\n`);
 
   if (runs && runs.length > 0) {
-    const runId = runs[0].id;
-    const { data: leads } = await supabase
-      .from('leads')
-      .select('id, name, website, research_status, compatibility_grade, error_message')
-      .eq('run_id', runId);
-
-    console.log('\n\nLeads for most recent run:');
-    console.log(JSON.stringify(leads, null, 2));
+    console.log("Latest 10 runs:");
+    console.log("================");
+    runs.slice(0, 10).forEach((run, i) => {
+      console.log(`${i + 1}. ID: ${run.id}`);
+      console.log(`   Status: ${run.status}`);
+      console.log(`   Created: ${run.created_at}`);
+      console.log(`   Location: ${run.location || "N/A"}`);
+      console.log(`   Query: ${run.query || "N/A"}`);
+      console.log(`   Total Leads: ${run.total_leads || 0}`);
+      console.log(`   Researched: ${run.researched_leads || 0}`);
+      console.log("   ---");
+    });
+  } else {
+    console.log("No runs found in database.");
   }
+
+  // Check leads count
+  const { count: leadsCount } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true });
+
+  console.log(`\nTotal leads in database: ${leadsCount || 0}`);
 }
 
-checkRuns();
+checkRuns().catch(console.error);

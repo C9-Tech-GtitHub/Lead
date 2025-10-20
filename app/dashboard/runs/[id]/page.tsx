@@ -1,9 +1,9 @@
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
-import { DashboardHeader } from '@/components/dashboard/header';
-import { RunDetails } from '@/components/runs/run-details';
-import { LeadsList } from '@/components/runs/leads-list';
-import Link from 'next/link';
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { DashboardHeader } from "@/components/dashboard/header";
+import { RunDetails } from "@/components/runs/run-details";
+import { LeadsList } from "@/components/runs/leads-list";
+import Link from "next/link";
 
 interface RunPageProps {
   params: Promise<{ id: string }>;
@@ -19,28 +19,27 @@ export default async function RunPage({ params }: RunPageProps) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect('/auth/login');
+    redirect("/auth/login");
   }
 
-  // Fetch run details
+  // Fetch run details (shared across all users)
   const { data: run } = await supabase
-    .from('runs')
-    .select('*')
-    .eq('id', id)
-    .eq('user_id', user.id)
+    .from("runs")
+    .select("*")
+    .eq("id", id)
     .single();
 
   if (!run) {
-    redirect('/dashboard');
+    redirect("/dashboard");
   }
 
   // Fetch leads for this run
   const { data: leads } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('run_id', id)
-    .order('compatibility_grade', { ascending: true })
-    .order('created_at', { ascending: false });
+    .from("leads")
+    .select("*")
+    .eq("run_id", id)
+    .order("compatibility_grade", { ascending: true })
+    .order("created_at", { ascending: false });
 
   return (
     <div className="min-h-screen bg-gray-50">
