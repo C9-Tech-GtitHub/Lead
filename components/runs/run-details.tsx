@@ -32,6 +32,7 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
   const [run, setRun] = useState<Run>(initialRun);
   const [isResearchingAll, setIsResearchingAll] = useState(false);
   const [isPrescreening, setIsPrescreening] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
   const handlePrescreen = async () => {
     setIsPrescreening(true);
@@ -79,6 +80,43 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
     }
   };
 
+  const handleResetRun = async () => {
+    if (
+      !confirm(
+        "Reset this run to start fresh?\n\nThis will:\n- Clear all grades and research data\n- Reset progress to 0%\n- Clear prescreening data (franchises will be re-checked)\n- Keep the scraped business info (names, addresses, etc.)\n\nThe run will be ready to prescreen and research again.",
+      )
+    ) {
+      return;
+    }
+
+    setIsResetting(true);
+
+    try {
+      const response = await fetch("/api/runs/clear-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId: run.id }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to reset run");
+      }
+
+      const result = await response.json();
+      alert(`✅ ${result.message}`);
+
+      // The run status will update via realtime subscription
+    } catch (error) {
+      console.error("Error resetting run:", error);
+      alert(
+        `Failed to reset run: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   useEffect(() => {
     const supabase = createClient();
 
@@ -94,10 +132,13 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
           filter: `id=eq.${initialRun.id}`,
         },
         (payload) => {
+          console.log("[RunDetails] Run updated:", payload.new);
           setRun(payload.new as Run);
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("[RunDetails] Subscription status:", status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -131,7 +172,7 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
           </span>
         </div>
 
-        <div className="mb-3 flex items-center gap-3">
+        <div className="mb-3 flex items-center gap-3 flex-wrap">
           <StatusBadge status={run.status} />
 
           {/* Prescreen and Research buttons - show when status is "ready" */}
@@ -153,6 +194,25 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
               </button>
             </>
           )}
+
+          {/* Reset Run Button - show for completed runs or runs with research data */}
+          {(run.status === "completed" ||
+            run.status === "ready" ||
+            run.status === "researching" ||
+            run.grade_a_count +
+              run.grade_b_count +
+              run.grade_c_count +
+              run.grade_d_count +
+              run.grade_f_count >
+              0) && (
+            <button
+              onClick={handleResetRun}
+              disabled={isResetting}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium text-sm transition-colors"
+            >
+              {isResetting ? "Resetting..." : "🔄 Reset Run"}
+            </button>
+          )}
         </div>
 
         {run.status !== "failed" && run.status !== "completed" && (
@@ -170,7 +230,8 @@ export function RunDetails({ run: initialRun }: RunDetailsProps) {
               </div>
             </div>
             <div className="text-xs text-gray-500 mt-2">
-              {Math.round((run.progress / 100) * run.total_leads)} of {run.total_leads} leads processed
+              {Math.round((run.progress / 100) * run.total_leads)} of{" "}
+              {run.total_leads} leads processed
             </div>
           </>
         )}

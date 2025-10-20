@@ -3,16 +3,25 @@
 import { createClient } from "@/lib/supabase/server";
 import { inngest } from "@/lib/inngest/client";
 
+interface PrescreenConfig {
+  skipFranchises: boolean;
+  skipNationalBrands: boolean;
+  businessSizes: string[];
+  customPrompt?: string;
+}
+
 interface CreateRunParams {
   businessTypes: string[];
   location: string;
   targetCount: number;
+  prescreenConfig?: PrescreenConfig;
 }
 
 export async function createRun({
   businessTypes,
   location,
   targetCount,
+  prescreenConfig,
 }: CreateRunParams) {
   try {
     const supabase = await createClient();
@@ -40,6 +49,16 @@ export async function createRun({
     // Create display string for backward compatibility
     const businessTypeDisplay = businessTypes.join(", ");
 
+    // Default prescreen config if not provided
+    const defaultPrescreenConfig: PrescreenConfig = {
+      skipFranchises: true,
+      skipNationalBrands: true,
+      businessSizes: ["small", "medium"],
+      customPrompt: undefined,
+    };
+
+    const finalPrescreenConfig = prescreenConfig || defaultPrescreenConfig;
+
     // Create the run in the database
     const { data: run, error: createError } = await supabase
       .from("runs")
@@ -51,6 +70,7 @@ export async function createRun({
         location: location,
         target_count: sanitizedTargetCount,
         status: "pending",
+        prescreen_config: finalPrescreenConfig,
       })
       .select()
       .single();

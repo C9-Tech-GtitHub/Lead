@@ -1,59 +1,66 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
 
 async function checkPendingLeads() {
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  // Get the Magic the Gathering run
+  const { data: runs } = await supabase
+    .from("runs")
+    .select("*")
+    .eq("business_type", "Magic the Gathering")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (!runs || runs.length === 0) {
+    console.log("No Magic the Gathering runs found");
+    return;
+  }
+
+  const run = runs[0];
+
+  // Get pending leads (not franchises)
+  const { data: pendingLeads } = await supabase
+    .from("leads")
+    .select(
+      "id, name, address, website, research_status, prescreened, prescreen_result",
+    )
+    .eq("run_id", run.id)
+    .eq("research_status", "pending")
+    .order("name", { ascending: true });
+
+  console.log(
+    `=== PENDING INDEPENDENT MTG STORES (${pendingLeads?.length || 0}) ===\n`,
   );
 
-  const runId = 'e18b7c5e-91b8-49b1-947c-bee898a86d6b';
+  if (pendingLeads && pendingLeads.length > 0) {
+    console.log("These are independent stores ready for research:\n");
 
-  // Get leads by status
-  const { data: statusCounts } = await supabase
-    .from('leads')
-    .select('research_status')
-    .eq('run_id', runId);
-
-  const counts: Record<string, number> = {};
-  statusCounts?.forEach(lead => {
-    counts[lead.research_status] = (counts[lead.research_status] || 0) + 1;
-  });
-
-  console.log('=== LEAD STATUS COUNTS ===');
-  Object.entries(counts).forEach(([status, count]) => {
-    console.log(`${status}: ${count}`);
-  });
-  console.log();
-
-  // Get pending leads
-  const { data: pendingLeads } = await supabase
-    .from('leads')
-    .select('name, website, prescreen_result')
-    .eq('run_id', runId)
-    .eq('research_status', 'pending')
-    .limit(10);
-
-  console.log('=== FIRST 10 PENDING LEADS ===');
-  pendingLeads?.forEach((lead, i) => {
-    console.log(`${i + 1}. ${lead.name} - ${lead.website || 'no website'} (prescreen: ${lead.prescreen_result})`);
-  });
-  console.log();
-
-  // Check if there are any leads in progress
-  const { data: inProgressLeads } = await supabase
-    .from('leads')
-    .select('name, research_status')
-    .eq('run_id', runId)
-    .in('research_status', ['scraping', 'analyzing']);
-
-  console.log('=== LEADS IN PROGRESS ===');
-  if (inProgressLeads && inProgressLeads.length > 0) {
-    inProgressLeads.forEach(lead => {
-      console.log(`- ${lead.name}: ${lead.research_status}`);
+    pendingLeads.slice(0, 20).forEach((lead, idx) => {
+      console.log(`${idx + 1}. ${lead.name}`);
+      console.log(`   Website: ${lead.website || "No website found"}`);
+      console.log(`   Prescreened: ${lead.prescreened ? "Yes" : "No"}`);
+      if (lead.prescreen_result) {
+        console.log(`   Prescreen Result: ${lead.prescreen_result}`);
+      }
+      console.log("");
     });
+
+    if (pendingLeads.length > 20) {
+      console.log(`... and ${pendingLeads.length - 20} more\n`);
+    }
+
+    console.log(
+      `\n✅ These ${pendingLeads.length} leads are ready for lightweight research!`,
+    );
+    console.log(
+      'You can click "Research All" in your dashboard to start researching them.',
+    );
   } else {
-    console.log('None - all leads are either pending or completed');
+    console.log("No pending leads found. All have been researched or skipped.");
   }
 }
 
-checkPendingLeads();
+checkPendingLeads().catch(console.error);

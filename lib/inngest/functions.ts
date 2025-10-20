@@ -1,7 +1,8 @@
 import { inngest } from "./client";
 import { scrapeGoogleMaps } from "@/lib/scrapers/google-maps";
 import { scrapeWebsite } from "@/lib/scrapers/website";
-import { researchLead } from "@/lib/ai/researcher";
+import { lightweightResearchLead } from "@/lib/ai/lightweight-researcher";
+import { deepResearchLead } from "@/lib/ai/researcher";
 import { prescreenLeadsBatch } from "@/lib/ai/prescreen";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logProgress } from "@/lib/utils/progress-logger";
@@ -30,7 +31,9 @@ export const processLeadRun = inngest.createFunction(
     const { runId, userId, businessTypes, location, targetCount } = event.data;
 
     // For backward compatibility, handle both businessTypes (array) and businessType (string)
-    const queries = businessTypes || (event.data.businessType ? [event.data.businessType] : []);
+    const queries =
+      businessTypes ||
+      (event.data.businessType ? [event.data.businessType] : []);
     const businessTypeDisplay = queries.join(", ");
 
     // Step 1: Update run status to scraping
@@ -100,7 +103,9 @@ export const processLeadRun = inngest.createFunction(
 
         if (suburbConfig) {
           // Use city-search service for supported cities
-          console.log(`[Process Run] Multi-suburb search for "${query}" in ${location}`);
+          console.log(
+            `[Process Run] Multi-suburb search for "${query}" in ${location}`,
+          );
 
           await logProgress({
             runId,
@@ -123,7 +128,9 @@ export const processLeadRun = inngest.createFunction(
           });
         } else {
           // Fall back to regular single-location search
-          console.log(`[Process Run] Single-location search for "${query}" in ${location}`);
+          console.log(
+            `[Process Run] Single-location search for "${query}" in ${location}`,
+          );
 
           const rawResults = await scrapeGoogleMaps({
             query: query,
@@ -133,7 +140,8 @@ export const processLeadRun = inngest.createFunction(
 
           // Convert to SearchResult format for consistent deduplication
           queryResults = rawResults.map((r: any) => ({
-            place_id: r.place_id || r.data_id || `coord_${r.latitude}_${r.longitude}`,
+            place_id:
+              r.place_id || r.data_id || `coord_${r.latitude}_${r.longitude}`,
             name: r.name,
             address: r.address,
             phone: r.phone,
@@ -146,7 +154,8 @@ export const processLeadRun = inngest.createFunction(
         // Add only unique results from this query
         let newCount = 0;
         for (const result of queryResults) {
-          const placeId = result.place_id || `coord_${result.latitude}_${result.longitude}`;
+          const placeId =
+            result.place_id || `coord_${result.latitude}_${result.longitude}`;
 
           if (placeId && !seenPlaceIds.has(placeId)) {
             seenPlaceIds.add(placeId);
@@ -158,7 +167,9 @@ export const processLeadRun = inngest.createFunction(
           }
         }
 
-        console.log(`[Process Run] Query "${query}": Found ${newCount} new businesses (${queryResults.length} total, ${queryResults.length - newCount} duplicates)`);
+        console.log(
+          `[Process Run] Query "${query}": Found ${newCount} new businesses (${queryResults.length} total, ${queryResults.length - newCount} duplicates)`,
+        );
 
         await logProgress({
           runId,
@@ -259,6 +270,15 @@ export const processLeadRun = inngest.createFunction(
     const prescreenResults = await step.run("prescreen-leads", async () => {
       const supabase = createAdminClient();
 
+      // Fetch run details with prescreen config
+      const { data: run } = await supabase
+        .from("runs")
+        .select("prescreen_config")
+        .eq("id", runId)
+        .single();
+
+      const prescreenConfig = run?.prescreen_config;
+
       await logProgress({
         runId,
         userId,
@@ -284,7 +304,10 @@ export const processLeadRun = inngest.createFunction(
         businessType: businessTypeDisplay, // Use the display string with all business types
       }));
 
-      const results = await prescreenLeadsBatch(prescreenParams);
+      const results = await prescreenLeadsBatch(
+        prescreenParams,
+        prescreenConfig,
+      );
 
       let skippedCount = 0;
       let toResearchCount = 0;
@@ -411,271 +434,372 @@ export const researchIndividualLead = inngest.createFunction(
   },
   { event: "lead/research.triggered" },
   async ({ event, step }) => {
-    const { leadId, runId } = event.data;
+    const { leadId, runId, config } = event.data;
 
-    // Step 0: Check if run is paused
-    const isPaused = await step.run("check-if-paused", async () => {
-      const supabase = createAdminClient();
-      const { data: run } = await supabase
-        .from("runs")
-        .select("is_paused")
-        .eq("id", runId)
-        .single();
-      return run?.is_paused ?? false;
-    });
+    try {
+      // Step 0: Check if run is paused
+      const isPaused = await step.run("check-if-paused", async () => {
+        const supabase = createAdminClient();
+        const { data: run } = await supabase
+          .from("runs")
+          .select("is_paused")
+          .eq("id", runId)
+          .single();
+        return run?.is_paused ?? false;
+      });
 
-    if (isPaused) {
-      console.log(`[Research] Run ${runId} is paused, skipping lead ${leadId}`);
-      return { success: false, reason: "run-paused" };
-    }
-
-    // Step 1: Fetch lead details
-    const lead = await step.run("fetch-lead", async () => {
-      const supabase = createAdminClient();
-      const { data } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("id", leadId)
-        .single();
-      return data;
-    });
-
-    if (!lead) {
-      return { success: false, reason: "lead-not-found" };
-    }
-
-    const runDetails = await step.run("fetch-run-details", async () => {
-      const supabase = createAdminClient();
-      const { data } = await supabase
-        .from("runs")
-        .select("user_id, location, business_type")
-        .eq("id", runId)
-        .single();
-      return data as RunDetails | null;
-    });
-
-    if (!runDetails) {
-      return { success: false, reason: "run-not-found" };
-    }
-
-    // Step 1.5: If no website, try to find one via Google Search
-    let websiteUrl = lead.website;
-    if (!websiteUrl) {
-      websiteUrl = await step.run("search-for-website", async () => {
-        await logProgress({
-          runId,
-          userId: runDetails.user_id,
-          eventType: "lead_research_started",
-          message: `${lead.name} - Searching Google for website...`,
-          details: { leadName: lead.name },
-        });
-
-        // Try to find website via Google Search
-        const foundWebsite = await findBusinessWebsite(
-          lead.name,
-          lead.address || runDetails.location || "",
+      if (isPaused) {
+        console.log(
+          `[Research] Run ${runId} is paused, skipping lead ${leadId}`,
         );
+        return { success: false, reason: "run-paused" };
+      }
 
-        if (foundWebsite) {
-          // Update the lead with the found website
-          await createAdminClient()
+      // Step 1: Fetch lead details
+      const lead = await step.run("fetch-lead", async () => {
+        const supabase = createAdminClient();
+        const { data } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("id", leadId)
+          .single();
+        return data;
+      });
+
+      if (!lead) {
+        return { success: false, reason: "lead-not-found" };
+      }
+
+      const runDetails = await step.run("fetch-run-details", async () => {
+        const supabase = createAdminClient();
+        const { data } = await supabase
+          .from("runs")
+          .select("user_id, location, business_type")
+          .eq("id", runId)
+          .single();
+        return data as RunDetails | null;
+      });
+
+      if (!runDetails) {
+        return { success: false, reason: "run-not-found" };
+      }
+
+      // Step 1.5: If no website, try to find one via Google Search
+      let websiteUrl = lead.website;
+      if (!websiteUrl) {
+        websiteUrl = await step.run("search-for-website", async () => {
+          await logProgress({
+            runId,
+            userId: runDetails.user_id,
+            eventType: "lead_research_started",
+            message: `${lead.name} - Searching Google for website...`,
+            details: { leadName: lead.name },
+          });
+
+          // Try to find website via Google Search
+          const foundWebsite = await findBusinessWebsite(
+            lead.name,
+            lead.address || runDetails.location || "",
+          );
+
+          if (foundWebsite) {
+            // Update the lead with the found website
+            await createAdminClient()
+              .from("leads")
+              .update({ website: foundWebsite })
+              .eq("id", leadId);
+
+            await logProgress({
+              runId,
+              userId: runDetails.user_id,
+              eventType: "lead_research_started",
+              message: `${lead.name} - Found website via Google: ${foundWebsite}`,
+              details: { leadName: lead.name, website: foundWebsite },
+            });
+          }
+
+          return foundWebsite;
+        });
+      }
+
+      // Step 2: If still no website after search, mark as completed with F grade
+      if (!websiteUrl) {
+        await step.run("mark-no-website", async () => {
+          const supabase = createAdminClient();
+          await supabase
             .from("leads")
-            .update({ website: foundWebsite })
+            .update({
+              research_status: "completed",
+              error_message:
+                "No website found via Google Maps or Google Search",
+              compatibility_grade: "F",
+              grade_reasoning:
+                "Cannot assess compatibility without an online presence. Business lacks a discoverable website.",
+              researched_at: new Date().toISOString(),
+            })
             .eq("id", leadId);
 
           await logProgress({
             runId,
             userId: runDetails.user_id,
-            eventType: "lead_research_started",
-            message: `${lead.name} - Found website via Google: ${foundWebsite}`,
-            details: { leadName: lead.name, website: foundWebsite },
+            eventType: "lead_research_completed",
+            message: `Completed research for ${lead.name} - Grade: F`,
+            details: { leadName: lead.name, grade: "F", reason: "no-website" },
           });
-        }
+        });
+        return { success: false, reason: "no-website" };
+      }
 
-        return foundWebsite;
-      });
-    }
-
-    // Step 2: If still no website after search, mark as completed with F grade
-    if (!websiteUrl) {
-      await step.run("mark-no-website", async () => {
+      // Step 3: Update status to scraping
+      await step.run("update-status-scraping", async () => {
         const supabase = createAdminClient();
         await supabase
           .from("leads")
-          .update({
-            research_status: "completed",
-            error_message: "No website found via Google Maps or Google Search",
-            compatibility_grade: "F",
-            grade_reasoning:
-              "Cannot assess compatibility without an online presence. Business lacks a discoverable website.",
-            researched_at: new Date().toISOString(),
-          })
+          .update({ research_status: "scraping" })
           .eq("id", leadId);
 
         await logProgress({
           runId,
           userId: runDetails.user_id,
-          eventType: "lead_research_completed",
-          message: `Completed research for ${lead.name} - Grade: F`,
-          details: { leadName: lead.name, grade: "F", reason: "no-website" },
+          eventType: "lead_research_started",
+          message: `Researching ${lead.name}`,
+          details: { leadName: lead.name, website: websiteUrl },
         });
       });
-      return { success: false, reason: "no-website" };
-    }
 
-    // Step 3: Update status to scraping
-    await step.run("update-status-scraping", async () => {
-      const supabase = createAdminClient();
-      await supabase
-        .from("leads")
-        .update({ research_status: "scraping" })
-        .eq("id", leadId);
+      // Step 4: Scrape website content (with timeout protection)
+      const websiteData = await step.run("scrape-website", async () => {
+        try {
+          // Add timeout protection for scraping (30 seconds max)
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error("Website scraping timeout")),
+              30000,
+            ),
+          );
 
-      await logProgress({
-        runId,
-        userId: runDetails.user_id,
-        eventType: "lead_research_started",
-        message: `Researching ${lead.name}`,
-        details: { leadName: lead.name, website: websiteUrl },
+          const scrapePromise = scrapeWebsite(websiteUrl);
+
+          return (await Promise.race([
+            scrapePromise,
+            timeoutPromise,
+          ])) as Awaited<ReturnType<typeof scrapeWebsite>>;
+        } catch (error) {
+          console.error(`[Research] Scraping failed for ${lead.name}:`, error);
+          // Return minimal data if scraping fails
+          return {
+            mainContent: "",
+            aboutContent: null,
+            teamContent: null,
+            hasMultipleLocations: false,
+            teamSize: null,
+            abn: null,
+            abnData: null,
+          };
+        }
       });
-    });
 
-    // Step 4: Scrape website content (with timeout protection)
-    const websiteData = await step.run("scrape-website", async () => {
-      try {
-        // Add timeout protection for scraping (30 seconds max)
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Website scraping timeout")), 30000)
+      // Step 4: Update status to analyzing
+      await step.run("update-status-analyzing", async () => {
+        const supabase = createAdminClient();
+        await supabase
+          .from("leads")
+          .update({
+            research_status: "analyzing",
+            website_content: websiteData.mainContent,
+            about_content: websiteData.aboutContent,
+            team_content: websiteData.teamContent,
+            has_multiple_locations: websiteData.hasMultipleLocations,
+            team_size: websiteData.teamSize,
+            abn: websiteData.abn,
+            abn_entity_name: websiteData.abnData?.entityName,
+            abn_status: websiteData.abnData?.abnStatus,
+            abn_registered_date: websiteData.abnData?.abnStatusEffectiveFrom,
+            business_age_years: websiteData.abnData?.businessAge,
+          })
+          .eq("id", leadId);
+      });
+
+      // Step 5: Analyze with GPT-5 (LIGHTWEIGHT - no web search)
+      const analysis = await step.run("ai-analysis-lightweight", async () => {
+        try {
+          return await lightweightResearchLead({
+            name: lead.name,
+            website: websiteUrl,
+            websiteContent: websiteData.mainContent,
+            aboutContent: websiteData.aboutContent,
+            teamContent: websiteData.teamContent,
+            hasMultipleLocations: websiteData.hasMultipleLocations,
+            teamSize: websiteData.teamSize,
+            businessType: runDetails.business_type ?? lead.business_type ?? "",
+            config: config || undefined,
+          });
+        } catch (error) {
+          console.error(
+            `[Research] AI analysis failed for ${lead.name}:`,
+            error,
+          );
+          // If AI analysis fails, return a default F grade
+          return {
+            report: "AI analysis failed. Unable to assess compatibility.",
+            grade: "F" as const,
+            gradeReasoning: `AI analysis error: ${error instanceof Error ? error.message : "Unknown error"}`,
+            suggestedHooks: [],
+            painPoints: [],
+            opportunities: [],
+          };
+        }
+      });
+
+      // Step 6: Save AI analysis results
+      await step.run("save-analysis", async () => {
+        const supabase = createAdminClient();
+
+        console.log(
+          `[Research] Saving analysis for ${lead.name} - Grade: ${analysis.grade}`,
         );
 
-        const scrapePromise = scrapeWebsite(websiteUrl);
-
-        return await Promise.race([scrapePromise, timeoutPromise]) as Awaited<ReturnType<typeof scrapeWebsite>>;
-      } catch (error) {
-        console.error(`[Research] Scraping failed for ${lead.name}:`, error);
-        // Return minimal data if scraping fails
-        return {
-          mainContent: "",
-          aboutContent: null,
-          teamContent: null,
-          hasMultipleLocations: false,
-          teamSize: null,
-          abn: null,
-          abnData: null,
-        };
-      }
-    });
-
-    // Step 4: Update status to analyzing
-    await step.run("update-status-analyzing", async () => {
-      const supabase = createAdminClient();
-      await supabase
-        .from("leads")
-        .update({
-          research_status: "analyzing",
-          website_content: websiteData.mainContent,
-          about_content: websiteData.aboutContent,
-          team_content: websiteData.teamContent,
-          has_multiple_locations: websiteData.hasMultipleLocations,
-          team_size: websiteData.teamSize,
-          abn: websiteData.abn,
-          abn_entity_name: websiteData.abnData?.entityName,
-          abn_status: websiteData.abnData?.abnStatus,
-          abn_registered_date: websiteData.abnData?.abnStatusEffectiveFrom,
-          business_age_years: websiteData.abnData?.businessAge,
-        })
-        .eq("id", leadId);
-    });
-
-    // Step 5: Analyze with GPT-5
-    const analysis = await step.run("ai-analysis", async () => {
-      return await researchLead({
-        name: lead.name,
-        website: websiteUrl,
-        websiteContent: websiteData.mainContent,
-        aboutContent: websiteData.aboutContent,
-        teamContent: websiteData.teamContent,
-        hasMultipleLocations: websiteData.hasMultipleLocations,
-        teamSize: websiteData.teamSize,
-        businessType: runDetails.business_type ?? lead.business_type ?? "",
-      });
-    });
-
-    // Step 6: Save AI analysis results
-    await step.run("save-analysis", async () => {
-      const supabase = createAdminClient();
-      await supabase
-        .from("leads")
-        .update({
-          research_status: "completed",
-          ai_report: analysis.report,
-          compatibility_grade: analysis.grade,
-          grade_reasoning: analysis.gradeReasoning,
-          suggested_hooks: analysis.suggestedHooks,
-          pain_points: analysis.painPoints,
-          opportunities: analysis.opportunities,
-          researched_at: new Date().toISOString(),
-        })
-        .eq("id", leadId);
-
-      await logProgress({
-        runId,
-        userId: runDetails.user_id,
-        eventType: "lead_research_completed",
-        message: `Completed research for ${lead.name} - Grade: ${analysis.grade}`,
-        details: { leadName: lead.name, grade: analysis.grade },
-      });
-    });
-
-    // Step 7: Check if run is complete
-    await step.run("check-run-completion", async () => {
-      const supabase = createAdminClient();
-
-      // Get total leads count (actual scraped, not target)
-      const { count: totalLeads } = await supabase
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("run_id", runId);
-
-      const { count: completedCount } = await supabase
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("run_id", runId)
-        .in("research_status", ["completed", "failed", "skipped"]);
-
-      // If all leads processed, mark run as completed
-      if (completedCount && totalLeads && completedCount >= totalLeads) {
-        await supabase
-          .from("runs")
+        const { data, error } = await supabase
+          .from("leads")
           .update({
-            status: "completed",
-            completed_at: new Date().toISOString(),
+            research_status: "completed",
+            // research_depth: "lightweight", // TODO: Re-enable after adding column to database
+            ai_report: analysis.report,
+            compatibility_grade: analysis.grade,
+            grade_reasoning: analysis.gradeReasoning,
+            suggested_hooks: analysis.suggestedHooks,
+            pain_points: analysis.painPoints,
+            opportunities: analysis.opportunities,
+            researched_at: new Date().toISOString(),
           })
-          .eq("id", runId);
+          .eq("id", leadId)
+          .select();
 
-        const { data: runData } = await supabase
+        if (error) {
+          console.error(
+            `[Research] Error saving analysis for ${lead.name}:`,
+            error,
+          );
+          throw new Error(`Failed to save analysis: ${error.message}`);
+        }
+
+        console.log(
+          `[Research] Successfully saved analysis for ${lead.name}`,
+          data,
+        );
+
+        await logProgress({
+          runId,
+          userId: runDetails.user_id,
+          eventType: "lead_research_completed",
+          message: `Completed research for ${lead.name} - Grade: ${analysis.grade}`,
+          details: { leadName: lead.name, grade: analysis.grade },
+        });
+      });
+
+      // Step 7: Check if run is complete
+      await step.run("check-run-completion", async () => {
+        const supabase = createAdminClient();
+
+        // Get total leads count (actual scraped, not target)
+        const { count: totalLeads } = await supabase
+          .from("leads")
+          .select("id", { count: "exact", head: true })
+          .eq("run_id", runId);
+
+        const { count: completedCount } = await supabase
+          .from("leads")
+          .select("id", { count: "exact", head: true })
+          .eq("run_id", runId)
+          .in("research_status", ["completed", "failed", "skipped"]);
+
+        // If all leads processed, mark run as completed
+        if (completedCount && totalLeads && completedCount >= totalLeads) {
+          await supabase
+            .from("runs")
+            .update({
+              status: "completed",
+              completed_at: new Date().toISOString(),
+            })
+            .eq("id", runId);
+
+          const { data: runData } = await supabase
+            .from("runs")
+            .select("user_id, total_leads, grade_a_count, grade_b_count")
+            .eq("id", runId)
+            .single();
+
+          if (runData) {
+            await logProgress({
+              runId,
+              userId: runData.user_id,
+              eventType: "run_completed",
+              message: `Research run completed! Analyzed ${runData.total_leads} leads`,
+              details: {
+                totalLeads: runData.total_leads,
+                gradeA: runData.grade_a_count,
+                gradeB: runData.grade_b_count,
+              },
+            });
+          }
+        }
+      });
+
+      return { success: true, leadId, grade: analysis.grade };
+    } catch (error) {
+      // Catch any unhandled errors and mark lead as failed
+      console.error(`[Research] Unexpected error for lead ${leadId}:`, error);
+
+      await step.run("mark-as-failed", async () => {
+        const supabase = createAdminClient();
+
+        // Get run details for logging
+        const { data: run } = await supabase
           .from("runs")
-          .select("user_id, total_leads, grade_a_count, grade_b_count")
+          .select("user_id")
           .eq("id", runId)
           .single();
 
-        if (runData) {
+        // Get lead name for error message
+        const { data: lead } = await supabase
+          .from("leads")
+          .select("name")
+          .eq("id", leadId)
+          .single();
+
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Unknown error during research";
+
+        await supabase
+          .from("leads")
+          .update({
+            research_status: "failed",
+            error_message: errorMessage,
+            compatibility_grade: "F",
+            grade_reasoning: `Research failed: ${errorMessage}`,
+            researched_at: new Date().toISOString(),
+          })
+          .eq("id", leadId);
+
+        if (run && lead) {
           await logProgress({
             runId,
-            userId: runData.user_id,
-            eventType: "run_completed",
-            message: `Research run completed! Analyzed ${runData.total_leads} leads`,
-            details: {
-              totalLeads: runData.total_leads,
-              gradeA: runData.grade_a_count,
-              gradeB: runData.grade_b_count,
-            },
+            userId: run.user_id,
+            eventType: "lead_research_failed",
+            message: `Research failed for ${lead.name}: ${errorMessage}`,
+            details: { leadName: lead.name, error: errorMessage },
           });
         }
-      }
-    });
+      });
 
-    return { success: true, leadId, grade: analysis.grade };
+      return {
+        success: false,
+        reason: "error",
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
   },
 );
 
@@ -691,7 +815,7 @@ export const triggerResearchAll = inngest.createFunction(
   },
   { event: "lead/research-all.triggered" },
   async ({ event, step }) => {
-    const { runId } = event.data;
+    const { runId, config } = event.data;
 
     // Step 1: Update run status to researching
     await step.run("update-run-status-researching", async () => {
@@ -725,7 +849,7 @@ export const triggerResearchAll = inngest.createFunction(
         .select("id")
         .eq("run_id", runId)
         .eq("research_status", "pending")
-        .neq("prescreen_result", "skip"); // Exclude franchises
+        .or("prescreen_result.is.null,prescreen_result.neq.skip"); // Include NULL and non-skip leads
       return data || [];
     });
 
@@ -749,6 +873,7 @@ export const triggerResearchAll = inngest.createFunction(
             data: {
               leadId: lead.id,
               runId: runId,
+              config: config || null,
             },
           })),
         );
@@ -773,7 +898,11 @@ export const triggerResearchAll = inngest.createFunction(
         }
       }
 
-      return { success: true, leadsTriggered: leads.length, batches: batches.length };
+      return {
+        success: true,
+        leadsTriggered: leads.length,
+        batches: batches.length,
+      };
     } else {
       return { success: false, reason: "no-pending-leads", leadsTriggered: 0 };
     }
@@ -859,13 +988,15 @@ export const triggerPrescreen = inngest.createFunction(
 
       const { data: run } = await supabase
         .from("runs")
-        .select("user_id")
+        .select("user_id, prescreen_config")
         .eq("id", runId)
         .single();
 
       if (!run) {
         throw new Error("Run not found");
       }
+
+      const prescreenConfig = run.prescreen_config;
 
       await logProgress({
         runId,
@@ -882,7 +1013,10 @@ export const triggerPrescreen = inngest.createFunction(
         businessType: businessType,
       }));
 
-      const results = await prescreenLeadsBatch(prescreenParams);
+      const results = await prescreenLeadsBatch(
+        prescreenParams,
+        prescreenConfig,
+      );
 
       let skippedCount = 0;
       let toResearchCount = 0;
@@ -971,10 +1105,199 @@ export const triggerPrescreen = inngest.createFunction(
   },
 );
 
+// ============================================
+// Deep Research for Individual Lead
+// ============================================
+// Re-research a lead with comprehensive web search analysis
+export const deepResearchIndividualLead = inngest.createFunction(
+  {
+    id: "deep-research-individual-lead",
+    name: "Deep Research Individual Lead",
+    retries: 2,
+  },
+  { event: "lead/deep-research.triggered" },
+  async ({ event, step }) => {
+    const { leadId, runId } = event.data;
+
+    // Step 1: Get lead and run details
+    const { lead, runDetails, websiteData } = await step.run(
+      "get-lead-details",
+      async () => {
+        const supabase = createAdminClient();
+
+        const { data: lead } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("id", leadId)
+          .single();
+
+        if (!lead) throw new Error(`Lead ${leadId} not found`);
+
+        const { data: run } = await supabase
+          .from("runs")
+          .select("user_id, business_type, location")
+          .eq("id", runId)
+          .single();
+
+        if (!run) throw new Error(`Run ${runId} not found`);
+
+        // Check if we have website content already
+        if (!lead.website_content) {
+          throw new Error(
+            "Lead must be scraped before deep research. Run regular research first.",
+          );
+        }
+
+        return {
+          lead,
+          runDetails: run as RunDetails,
+          websiteData: {
+            mainContent: lead.website_content || "",
+            aboutContent: lead.about_content || undefined,
+            teamContent: lead.team_content || undefined,
+            hasMultipleLocations: lead.has_multiple_locations || false,
+            teamSize: lead.team_size || undefined,
+          },
+        };
+      },
+    );
+
+    // Step 2: Update status to analyzing
+    await step.run("update-status-analyzing", async () => {
+      const supabase = createAdminClient();
+      await supabase
+        .from("leads")
+        .update({ research_status: "analyzing" })
+        .eq("id", leadId);
+    });
+
+    // Step 3: Deep analysis with GPT-5 + web search
+    const analysis = await step.run("ai-deep-analysis", async () => {
+      return await deepResearchLead({
+        name: lead.name,
+        website: lead.website || "",
+        websiteContent: websiteData.mainContent,
+        aboutContent: websiteData.aboutContent,
+        teamContent: websiteData.teamContent,
+        hasMultipleLocations: websiteData.hasMultipleLocations,
+        teamSize: websiteData.teamSize,
+        businessType: runDetails.business_type ?? lead.business_type ?? "",
+      });
+    });
+
+    // Step 4: Save deep analysis results
+    await step.run("save-deep-analysis", async () => {
+      const supabase = createAdminClient();
+      await supabase
+        .from("leads")
+        .update({
+          research_status: "completed",
+          // research_depth: "deep", // TODO: Re-enable after adding column to database
+          ai_report: analysis.report,
+          compatibility_grade: analysis.grade,
+          grade_reasoning: analysis.gradeReasoning,
+          suggested_hooks: analysis.suggestedHooks,
+          pain_points: analysis.painPoints,
+          opportunities: analysis.opportunities,
+          researched_at: new Date().toISOString(),
+        })
+        .eq("id", leadId);
+
+      await logProgress({
+        runId,
+        userId: runDetails.user_id,
+        eventType: "lead_deep_research_completed",
+        message: `Deep research completed for ${lead.name} - Grade: ${analysis.grade}`,
+        details: { leadName: lead.name, grade: analysis.grade },
+      });
+    });
+
+    return { success: true, leadId, grade: analysis.grade };
+  },
+);
+
+// ============================================
+// Deep Research for Multiple Leads
+// ============================================
+// Trigger deep research for multiple leads (all, by grade, etc.)
+export const deepResearchMultipleLeads = inngest.createFunction(
+  {
+    id: "deep-research-multiple-leads",
+    name: "Deep Research Multiple Leads",
+    retries: 1,
+  },
+  { event: "lead/deep-research-multiple.triggered" },
+  async ({ event, step }) => {
+    const { runId, leadIds, filterGrade } = event.data;
+
+    // Step 1: Get leads to deep research
+    const leads = await step.run("get-leads", async () => {
+      const supabase = createAdminClient();
+
+      let query = supabase
+        .from("leads")
+        .select("id, name, run_id")
+        .eq("run_id", runId)
+        .eq("research_status", "completed"); // Only deep research already-researched leads
+
+      // Filter by specific lead IDs if provided
+      if (leadIds && leadIds.length > 0) {
+        query = query.in("id", leadIds);
+      }
+      // Or filter by grade
+      else if (filterGrade && filterGrade !== "all") {
+        query = query.eq("compatibility_grade", filterGrade);
+      }
+
+      const { data: leads } = await query;
+      return leads || [];
+    });
+
+    if (leads.length === 0) {
+      return { success: true, message: "No leads to deep research", count: 0 };
+    }
+
+    // Step 2: Trigger individual deep research for each lead
+    await step.run("trigger-deep-research-events", async () => {
+      const supabase = createAdminClient();
+
+      for (const lead of leads) {
+        await inngest.send({
+          name: "lead/deep-research.triggered",
+          data: {
+            leadId: lead.id,
+            runId: lead.run_id,
+          },
+        });
+      }
+
+      const { data: run } = await supabase
+        .from("runs")
+        .select("user_id")
+        .eq("id", runId)
+        .single();
+
+      if (run) {
+        await logProgress({
+          runId,
+          userId: run.user_id,
+          eventType: "deep_research_batch_started",
+          message: `Started deep research for ${leads.length} leads${filterGrade && filterGrade !== "all" ? ` (Grade ${filterGrade})` : ""}`,
+          details: { count: leads.length, filterGrade },
+        });
+      }
+    });
+
+    return { success: true, count: leads.length };
+  },
+);
+
 // Export all functions
 export const functions = [
   processLeadRun,
   researchIndividualLead,
   triggerResearchAll,
+  deepResearchIndividualLead,
+  deepResearchMultipleLeads,
   triggerPrescreen,
 ];

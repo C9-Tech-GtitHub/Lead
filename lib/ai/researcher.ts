@@ -1,6 +1,7 @@
 /**
- * AI Lead Researcher
- * Uses GPT-5 for intelligent lead analysis and grading with web search
+ * DEEP AI Lead Researcher
+ * Uses GPT-5 for intelligent lead analysis and grading WITH web search
+ * This is the comprehensive, high-token version for detailed qualification
  * Following best practices from GPT5-BEST-PRACTICES.md
  */
 
@@ -40,11 +41,11 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-export async function researchLead(
+export async function deepResearchLead(
   params: ResearchLeadParams,
 ): Promise<LeadAnalysis> {
   try {
-    console.log(`[AI Researcher] Analyzing lead: ${params.name}`);
+    console.log(`[DEEP AI Researcher] Analyzing lead: ${params.name}`);
 
     // Construct the analysis prompt with all available data
     const userPrompt = buildAnalysisPrompt(params);
@@ -56,7 +57,7 @@ export async function researchLead(
       max_output_tokens: 2000,
       tools: [
         {
-          type: "web_search",
+          type: "web_search_preview",
         },
       ],
       tool_choice: "auto",
@@ -82,12 +83,12 @@ export async function researchLead(
     const analysis = parseGPT5Response(content);
 
     console.log(
-      `[AI Researcher] Analysis complete for ${params.name} - Grade: ${analysis.grade}`,
+      `[DEEP AI Researcher] Analysis complete for ${params.name} - Grade: ${analysis.grade}`,
     );
 
     return analysis;
   } catch (error) {
-    console.error("[AI Researcher] Error:", error);
+    console.error("[DEEP AI Researcher] Error:", error);
     throw new Error(
       `Failed to analyze lead: ${error instanceof Error ? error.message : "Unknown error"}`,
     );

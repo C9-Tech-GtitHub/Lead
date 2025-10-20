@@ -3,8 +3,8 @@
  * Uses Firecrawl API for intelligent website content extraction
  */
 
-import { extractABN } from '../utils/abn-extractor';
-import { lookupABN, type ABNLookupResult } from '../services/abn-lookup';
+import { extractABN } from "../utils/abn-extractor";
+import { lookupABN, type ABNLookupResult } from "../services/abn-lookup";
 
 interface WebsiteData {
   mainContent: string;
@@ -20,14 +20,15 @@ export async function scrapeWebsite(url: string): Promise<WebsiteData> {
   const apiKey = process.env.FIRECRAWL_API_KEY;
 
   if (!apiKey) {
-    throw new Error('FIRECRAWL_API_KEY is not configured');
+    throw new Error("FIRECRAWL_API_KEY is not configured");
   }
 
   try {
     console.log(`[Website Scraper] Scraping: ${url}`);
 
-    // Normalize URL
-    const normalizedUrl = url.startsWith('http') ? url : `https://${url}`;
+    // Normalize URL and remove trailing slash
+    let normalizedUrl = url.startsWith("http") ? url : `https://${url}`;
+    normalizedUrl = normalizedUrl.replace(/\/$/, ""); // Remove trailing slash
 
     // Step 1: Scrape main page
     const mainContent = await scrapeWithFirecrawl(normalizedUrl, apiKey);
@@ -37,7 +38,6 @@ export async function scrapeWebsite(url: string): Promise<WebsiteData> {
     const aboutUrls = [
       `${normalizedUrl}/about`,
       `${normalizedUrl}/about-us`,
-      `${normalizedUrl}/about-us/`,
       `${normalizedUrl}/company`,
     ];
 
@@ -77,10 +77,14 @@ export async function scrapeWebsite(url: string): Promise<WebsiteData> {
     }
 
     // Step 4: Analyze content for business size indicators
-    const analysis = analyzeBusinessSize(mainContent, aboutContent, teamContent);
+    const analysis = analyzeBusinessSize(
+      mainContent,
+      aboutContent,
+      teamContent,
+    );
 
     // Step 5: Extract and lookup ABN if present
-    const allContent = [mainContent, aboutContent].filter(Boolean).join('\n');
+    const allContent = [mainContent, aboutContent].filter(Boolean).join("\n");
     const abn = extractABN(allContent);
     let abnData: ABNLookupResult | undefined;
 
@@ -89,7 +93,9 @@ export async function scrapeWebsite(url: string): Promise<WebsiteData> {
       const lookupResult = await lookupABN(abn);
       if (lookupResult) {
         abnData = lookupResult;
-        console.log(`[Website Scraper] ABN verified: ${lookupResult.entityName} (${lookupResult.businessAge || '?'} years old)`);
+        console.log(
+          `[Website Scraper] ABN verified: ${lookupResult.entityName} (${lookupResult.businessAge || "?"} years old)`,
+        );
       }
     }
 
@@ -100,35 +106,39 @@ export async function scrapeWebsite(url: string): Promise<WebsiteData> {
       hasMultipleLocations: analysis.hasMultipleLocations,
       teamSize: analysis.teamSize,
       abn,
-      abnData
+      abnData,
     };
-
   } catch (error) {
-    console.error('[Website Scraper] Error:', error);
-    throw new Error(`Failed to scrape website: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    console.error("[Website Scraper] Error:", error);
+    throw new Error(
+      `Failed to scrape website: ${error instanceof Error ? error.message : "Unknown error"}`,
+    );
   }
 }
 
 /**
  * Internal helper: Scrape a single URL with Firecrawl
  */
-async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<string> {
+async function scrapeWithFirecrawl(
+  url: string,
+  apiKey: string,
+): Promise<string> {
   // Try v2 API first
   try {
-    const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
-      method: 'POST',
+    const response = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         url: url,
-        formats: ['markdown'],
+        formats: ["markdown"],
         onlyMainContent: true,
         timeout: 30000,
         // Add caching to reduce API calls
-        maxAge: 3600000 // 1 hour cache
-      })
+        maxAge: 3600000, // 1 hour cache
+      }),
     });
 
     if (!response.ok) {
@@ -136,8 +146,10 @@ async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<string>
 
       // Check if it's a 403 "website not supported" error
       if (response.status === 403) {
-        console.warn(`[Website Scraper] Website not supported by Firecrawl: ${url}`);
-        console.warn('[Website Scraper] Attempting fallback method...');
+        console.warn(
+          `[Website Scraper] Website not supported by Firecrawl: ${url}`,
+        );
+        console.warn("[Website Scraper] Attempting fallback method...");
         return await scrapeWithFallback(url);
       }
 
@@ -147,23 +159,23 @@ async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<string>
     const data = await response.json();
 
     // Firecrawl v2 returns content in data.markdown
-    return data.data?.markdown || data.markdown || '';
+    return data.data?.markdown || data.markdown || "";
   } catch (error) {
     // If v2 fails, try v1 as fallback
-    console.warn('[Website Scraper] v2 API failed, trying v1...');
+    console.warn("[Website Scraper] v2 API failed, trying v1...");
 
     try {
-      const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-        method: 'POST',
+      const response = await fetch("https://api.firecrawl.dev/v1/scrape", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           url: url,
-          formats: ['markdown'],
-          onlyMainContent: true
-        })
+          formats: ["markdown"],
+          onlyMainContent: true,
+        }),
       });
 
       if (!response.ok) {
@@ -171,18 +183,22 @@ async function scrapeWithFirecrawl(url: string, apiKey: string): Promise<string>
 
         // Check if it's a 403 "website not supported" error
         if (response.status === 403) {
-          console.warn(`[Website Scraper] Website not supported by Firecrawl: ${url}`);
-          console.warn('[Website Scraper] Attempting fallback method...');
+          console.warn(
+            `[Website Scraper] Website not supported by Firecrawl: ${url}`,
+          );
+          console.warn("[Website Scraper] Attempting fallback method...");
           return await scrapeWithFallback(url);
         }
 
-        throw new Error(`Firecrawl API error: ${response.status} - ${errorText}`);
+        throw new Error(
+          `Firecrawl API error: ${response.status} - ${errorText}`,
+        );
       }
 
       const data = await response.json();
-      return data.data?.markdown || data.markdown || '';
+      return data.data?.markdown || data.markdown || "";
     } catch (v1Error) {
-      console.error('[Website Scraper] Both v2 and v1 failed, using fallback');
+      console.error("[Website Scraper] Both v2 and v1 failed, using fallback");
       return await scrapeWithFallback(url);
     }
   }
@@ -198,10 +214,11 @@ async function scrapeWithFallback(url: string): Promise<string> {
 
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
       },
       // Add a timeout
-      signal: AbortSignal.timeout(10000)
+      signal: AbortSignal.timeout(10000),
     });
 
     if (!response.ok) {
@@ -213,32 +230,32 @@ async function scrapeWithFallback(url: string): Promise<string> {
     // Basic HTML to text conversion
     // Remove script and style tags
     let text = html
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
       // Remove HTML tags
-      .replace(/<[^>]+>/g, ' ')
+      .replace(/<[^>]+>/g, " ")
       // Decode common HTML entities
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
       .replace(/&quot;/g, '"')
       // Clean up whitespace
-      .replace(/\s+/g, ' ')
+      .replace(/\s+/g, " ")
       .trim();
 
     // Limit content to prevent overwhelming the AI
     if (text.length > 10000) {
-      text = text.substring(0, 10000) + '...';
+      text = text.substring(0, 10000) + "...";
     }
 
     if (text.length < 100) {
-      throw new Error('Insufficient content retrieved from fallback method');
+      throw new Error("Insufficient content retrieved from fallback method");
     }
 
     return text;
   } catch (error) {
-    console.error('[Website Scraper] Fallback method failed:', error);
+    console.error("[Website Scraper] Fallback method failed:", error);
     // Return a minimal response rather than failing completely
     return `Unable to fully scrape website: ${url}. Basic information only.`;
   }
@@ -250,11 +267,11 @@ async function scrapeWithFallback(url: string): Promise<string> {
 function analyzeBusinessSize(
   mainContent: string,
   aboutContent?: string,
-  teamContent?: string
+  teamContent?: string,
 ): { hasMultipleLocations: boolean; teamSize?: string } {
   const allContent = [mainContent, aboutContent, teamContent]
     .filter(Boolean)
-    .join(' ')
+    .join(" ")
     .toLowerCase();
 
   // Check for multiple locations
@@ -264,26 +281,34 @@ function analyzeBusinessSize(
     /offices? (in|across|throughout)/i,
   ];
 
-  const hasMultipleLocations = locationIndicators.some(regex => regex.test(allContent));
+  const hasMultipleLocations = locationIndicators.some((regex) =>
+    regex.test(allContent),
+  );
 
   // Estimate team size
   let teamSize: string | undefined;
 
   // Look for explicit team size mentions
-  const teamSizeMatch = allContent.match(/(\d+)\+?\s*(employees|team members|staff|people)/i);
+  const teamSizeMatch = allContent.match(
+    /(\d+)\+?\s*(employees|team members|staff|people)/i,
+  );
   if (teamSizeMatch) {
     const count = parseInt(teamSizeMatch[1]);
-    if (count < 10) teamSize = 'small (1-10)';
-    else if (count < 50) teamSize = 'medium (10-50)';
-    else if (count < 200) teamSize = 'large (50-200)';
-    else teamSize = 'enterprise (200+)';
+    if (count < 10) teamSize = "small (1-10)";
+    else if (count < 50) teamSize = "medium (10-50)";
+    else if (count < 200) teamSize = "large (50-200)";
+    else teamSize = "enterprise (200+)";
   } else {
     // Estimate based on team page structure
     if (teamContent) {
-      const teamMemberCount = (teamContent.match(/\b(director|manager|specialist|consultant|agent)\b/gi) || []).length;
-      if (teamMemberCount > 20) teamSize = 'large (50-200)';
-      else if (teamMemberCount > 10) teamSize = 'medium (10-50)';
-      else if (teamMemberCount > 0) teamSize = 'small (1-10)';
+      const teamMemberCount = (
+        teamContent.match(
+          /\b(director|manager|specialist|consultant|agent)\b/gi,
+        ) || []
+      ).length;
+      if (teamMemberCount > 20) teamSize = "large (50-200)";
+      else if (teamMemberCount > 10) teamSize = "medium (10-50)";
+      else if (teamMemberCount > 0) teamSize = "small (1-10)";
     }
   }
 

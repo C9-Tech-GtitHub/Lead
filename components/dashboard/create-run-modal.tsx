@@ -15,14 +15,25 @@ export function CreateRunModal({
   onClose,
   initialBusinessType,
   initialLocation,
-  initialTargetCount
+  initialTargetCount,
 }: CreateRunModalProps) {
-  const [businessTypes, setBusinessTypes] = useState(initialBusinessType || "Camping & Hiking Gear");
+  const [businessTypes, setBusinessTypes] = useState(
+    initialBusinessType || "Camping & Hiking Gear",
+  );
   const [location, setLocation] = useState(initialLocation || "");
   const [targetCount, setTargetCount] = useState(initialTargetCount || 100);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  // Prescreening configuration
+  const [skipFranchises, setSkipFranchises] = useState(true);
+  const [skipNationalBrands, setSkipNationalBrands] = useState(true);
+  const [businessSize, setBusinessSize] = useState<string[]>([
+    "small",
+    "medium",
+  ]);
+  const [customPrompt, setCustomPrompt] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,6 +58,12 @@ export function CreateRunModal({
         businessTypes: businessTypesArray,
         location,
         targetCount,
+        prescreenConfig: {
+          skipFranchises,
+          skipNationalBrands,
+          businessSizes: businessSize,
+          customPrompt: customPrompt.trim() || undefined,
+        },
       });
 
       // Close modal - real-time subscription will handle the update
@@ -67,8 +84,8 @@ export function CreateRunModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-md w-full p-6">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className="bg-white rounded-lg max-w-md w-full p-6 my-8">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold">Create New Research Run</h3>
           <button
@@ -104,7 +121,8 @@ export function CreateRunModal({
               placeholder="e.g., Artificial Grass, Fake Turf, Synthetic Lawn"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Enter one or more search queries separated by commas. Multiple queries will be searched and deduplicated.
+              Enter one or more search queries separated by commas. Multiple
+              queries will be searched and deduplicated.
             </p>
           </div>
 
@@ -177,6 +195,134 @@ export function CreateRunModal({
               Between 5 and 2000 leads — use the upper range for major metros
               when the multi-suburb search is enabled.
             </p>
+          </div>
+
+          {/* Prescreening Configuration */}
+          <div className="border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-semibold text-gray-900 mb-3">
+              Prescreening Filters
+            </h4>
+            <p className="text-xs text-gray-500 mb-3">
+              Automatically filter out businesses before research to save time
+              and tokens
+            </p>
+
+            {/* Skip Franchises & National Brands */}
+            <div className="space-y-2 mb-3">
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={skipFranchises}
+                  onChange={(e) => setSkipFranchises(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">
+                  Skip franchises (e.g., Good Games, Games World)
+                </span>
+              </label>
+
+              <label className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={skipNationalBrands}
+                  onChange={(e) => setSkipNationalBrands(e.target.checked)}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span className="ml-2 text-sm text-gray-700">
+                  Skip national brands (e.g., EB Games, Toyworld)
+                </span>
+              </label>
+            </div>
+
+            {/* Business Size */}
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Business Size
+              </label>
+              <div className="space-y-2">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={businessSize.includes("small")}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setBusinessSize([...businessSize, "small"]);
+                      } else {
+                        setBusinessSize(
+                          businessSize.filter((s) => s !== "small"),
+                        );
+                      }
+                    }}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">
+                    Small (solo/micro businesses)
+                  </span>
+                </label>
+
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={businessSize.includes("medium")}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setBusinessSize([...businessSize, "medium"]);
+                      } else {
+                        setBusinessSize(
+                          businessSize.filter((s) => s !== "medium"),
+                        );
+                      }
+                    }}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">
+                    Medium (small teams, multiple locations)
+                  </span>
+                </label>
+
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={businessSize.includes("enterprise")}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setBusinessSize([...businessSize, "enterprise"]);
+                      } else {
+                        setBusinessSize(
+                          businessSize.filter((s) => s !== "enterprise"),
+                        );
+                      }
+                    }}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">
+                    Enterprise (large companies)
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Custom Prompt */}
+            <div>
+              <label
+                htmlFor="customPrompt"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Additional Context (Optional)
+              </label>
+              <textarea
+                id="customPrompt"
+                value={customPrompt}
+                onChange={(e) => setCustomPrompt(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                placeholder="e.g., Look for stores that sell Magic the Gathering cards, not just general hobby stores"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Add specific criteria to help AI better identify relevant
+                businesses
+              </p>
+            </div>
           </div>
 
           <div className="flex gap-3 mt-6">

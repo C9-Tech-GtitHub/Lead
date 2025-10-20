@@ -1,8 +1,7 @@
-import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { inngest } from "@/lib/inngest/client";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
 
@@ -15,7 +14,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { runId, config } = await request.json();
+    const { runId } = await request.json();
 
     if (!runId) {
       return NextResponse.json({ error: "Missing runId" }, { status: 400 });
@@ -33,30 +32,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Run not found" }, { status: 404 });
     }
 
-    // Allow research from 'ready', 'completed', or 'researching' status
-    // 'researching' is allowed in case the previous attempt got stuck
-    // Block only if actively scraping or prescreening
-    if (run.status === "scraping" || run.status === "prescreening") {
+    // Update run to completed status
+    const { error: runUpdateError } = await supabase
+      .from("runs")
+      .update({
+        status: "completed",
+        progress: 100,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", runId);
+
+    if (runUpdateError) {
+      console.error("Error marking run as complete:", runUpdateError);
       return NextResponse.json(
         {
-          error: `Run is currently ${run.status}. Please wait until it completes.`,
+          error: "Failed to mark run as complete",
+          details: runUpdateError.message || runUpdateError.toString(),
         },
-        { status: 400 },
+        { status: 500 },
       );
     }
 
-    // Trigger the Inngest function
-    await inngest.send({
-      name: "lead/research-all.triggered",
-      data: {
-        runId: runId,
-        config: config || null,
-      },
+    return NextResponse.json({
+      success: true,
+      message: "Run marked as complete.",
     });
-
-    return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Error triggering research all:", error);
+    console.error("Error in mark-complete API:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 },

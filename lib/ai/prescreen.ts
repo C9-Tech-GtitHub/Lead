@@ -13,6 +13,13 @@ interface PrescreenParams {
   businessType: string;
 }
 
+interface PrescreenConfig {
+  skipFranchises: boolean;
+  skipNationalBrands: boolean;
+  businessSizes: string[];
+  customPrompt?: string;
+}
+
 interface PrescreenResult {
   shouldResearch: boolean; // false = skip research
   reason: string;
@@ -45,7 +52,7 @@ export async function prescreenLead(
       max_output_tokens: 500,
       tools: [
         {
-          type: "web_search",
+          type: "web_search_preview",
         },
       ],
       tool_choice: "auto",
@@ -203,7 +210,15 @@ function parsePrescreenResponse(
  */
 export async function prescreenLeadsBatch(
   leads: PrescreenParams[],
+  config?: PrescreenConfig,
 ): Promise<Map<string, PrescreenResult>> {
+  // Default config if not provided
+  const prescreenConfig: PrescreenConfig = config || {
+    skipFranchises: true,
+    skipNationalBrands: true,
+    businessSizes: ["small", "medium"],
+    customPrompt: undefined,
+  };
   const results = new Map<string, PrescreenResult>();
 
   if (leads.length === 0) {
@@ -219,11 +234,45 @@ export async function prescreenLeadsBatch(
       .map((lead, index) => `${index + 1}. ${lead.name}`)
       .join("\n");
 
-    const prompt = `You are screening ${leads.length} ${businessType} businesses to identify franchises and national brands.
+    // Build filtering instructions based on config
+    let filterInstructions = "";
 
-For each business below, determine if it's a franchise/chain (SKIP) or an independent local business (RESEARCH).
+    if (prescreenConfig.skipFranchises) {
+      filterInstructions +=
+        "\n- SKIP franchises (businesses with multiple standardized locations)";
+    }
 
-Business names:
+    if (prescreenConfig.skipNationalBrands) {
+      filterInstructions +=
+        "\n- SKIP national/international brands (recognizable brand names with centralized marketing)";
+    }
+
+    // Business size filtering
+    const sizeInstructions: string[] = [];
+    if (prescreenConfig.businessSizes.includes("small")) {
+      sizeInstructions.push("small/solo businesses");
+    }
+    if (prescreenConfig.businessSizes.includes("medium")) {
+      sizeInstructions.push("medium-sized businesses with small teams");
+    }
+    if (prescreenConfig.businessSizes.includes("enterprise")) {
+      sizeInstructions.push("large enterprise businesses");
+    }
+
+    if (sizeInstructions.length > 0) {
+      filterInstructions += `\n- RESEARCH these business sizes: ${sizeInstructions.join(", ")}`;
+    }
+
+    // Add custom prompt if provided
+    const customContext = prescreenConfig.customPrompt
+      ? `\n\n**Additional Context:**\n${prescreenConfig.customPrompt}`
+      : "";
+
+    const prompt = `You are screening ${leads.length} ${businessType} businesses to identify which ones should be researched for SEO services.
+
+**Filtering Criteria:**${filterInstructions}${customContext}
+
+**Business names:**
 ${businessList}
 
 For each business, respond with ONE line in this exact format:
@@ -233,9 +282,9 @@ Example:
 1. Macpac Melbourne | SKIP | YES | YES | HIGH | National outdoor gear franchise
 2. Joe's Local Cafe | RESEARCH | NO | NO | HIGH | Independent local business
 
-Known franchises/chains to SKIP: Macpac, Kathmandu, Rebel Sport, Anaconda, BCF, McDonald's, Subway, KFC, Starbucks, 7-Eleven, Ray White, LJ Hooker, banks, telcos, national retail chains.
+Known franchises/chains: Macpac, Kathmandu, Rebel Sport, Anaconda, BCF, McDonald's, Subway, KFC, Starbucks, 7-Eleven, Ray White, LJ Hooker, banks, telcos, national retail chains.
 
-Independent businesses to RESEARCH: Unique local names, single locations, owner-operated businesses.
+Independent businesses: Unique local names, single locations, owner-operated businesses.
 
 Provide your classification for all ${leads.length} businesses:`;
 
@@ -296,7 +345,8 @@ Provide your classification for all ${leads.length} businesses:`;
           // Try exact match first
           if (leadName === parsedName) return true;
           // Try partial match (for cases where GPT-5 shortens the name)
-          if (leadName.includes(parsedName) || parsedName.includes(leadName)) return true;
+          if (leadName.includes(parsedName) || parsedName.includes(leadName))
+            return true;
           return false;
         });
 
@@ -317,15 +367,39 @@ Provide your classification for all ${leads.length} businesses:`;
       if (!results.has(lead.name)) {
         // Check if the name contains known franchise/chain keywords
         const knownChains = [
-          'macpac', 'kathmandu', 'rebel', 'anaconda', 'bcf', 'rays outdoors',
-          'mountain designs', 'fjallraven', 'patagonia', 'the north face',
-          'mcdonalds', 'subway', 'kfc', 'starbucks', '7-eleven', '7 eleven',
-          'ray white', 'lj hooker', 'century 21', 'harcourts',
-          'commonwealth bank', 'westpac', 'anz', 'nab', 'telstra', 'optus', 'vodafone'
+          "macpac",
+          "kathmandu",
+          "rebel",
+          "anaconda",
+          "bcf",
+          "rays outdoors",
+          "mountain designs",
+          "fjallraven",
+          "patagonia",
+          "the north face",
+          "mcdonalds",
+          "subway",
+          "kfc",
+          "starbucks",
+          "7-eleven",
+          "7 eleven",
+          "ray white",
+          "lj hooker",
+          "century 21",
+          "harcourts",
+          "commonwealth bank",
+          "westpac",
+          "anz",
+          "nab",
+          "telstra",
+          "optus",
+          "vodafone",
         ];
 
         const lowerName = lead.name.toLowerCase();
-        const matchedChain = knownChains.find(chain => lowerName.includes(chain));
+        const matchedChain = knownChains.find((chain) =>
+          lowerName.includes(chain),
+        );
 
         if (matchedChain) {
           console.warn(

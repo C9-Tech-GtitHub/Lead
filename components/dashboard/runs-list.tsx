@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import Link from 'next/link';
-import { formatDateAU } from '@/lib/utils/format-date';
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
+import { formatDateAU } from "@/lib/utils/format-date";
 
 interface Run {
   id: string;
@@ -31,62 +31,68 @@ interface RunsListProps {
 
 export function RunsList({ initialRuns }: RunsListProps) {
   const [runs, setRuns] = useState<Run[]>(initialRuns);
-  const [researchingRuns, setResearchingRuns] = useState<Set<string>>(new Set());
+  const [researchingRuns, setResearchingRuns] = useState<Set<string>>(
+    new Set(),
+  );
   const [pausingRuns, setPausingRuns] = useState<Set<string>>(new Set());
   const [resumingRuns, setResumingRuns] = useState<Set<string>>(new Set());
   const [restartingRuns, setRestartingRuns] = useState<Set<string>>(new Set());
-  const [prescreeningRuns, setPrescreeningRuns] = useState<Set<string>>(new Set());
+  const [prescreeningRuns, setPrescreeningRuns] = useState<Set<string>>(
+    new Set(),
+  );
+  const [clearingRuns, setClearingRuns] = useState<Set<string>>(new Set());
+  const [completingRuns, setCompletingRuns] = useState<Set<string>>(new Set());
 
   // Helper function to refresh a single run's data
   const refreshRun = async (runId: string) => {
     try {
       const supabase = createClient();
       const { data: updatedRun } = await supabase
-        .from('runs')
-        .select('*')
-        .eq('id', runId)
+        .from("runs")
+        .select("*")
+        .eq("id", runId)
         .single();
 
       if (updatedRun) {
         setRuns((current) =>
-          current.map((run) =>
-            run.id === runId ? (updatedRun as Run) : run
-          )
+          current.map((run) => (run.id === runId ? (updatedRun as Run) : run)),
         );
       }
     } catch (error) {
-      console.error('Error refreshing run:', error);
+      console.error("Error refreshing run:", error);
     }
   };
 
   const handlePauseRun = async (runId: string, e: React.MouseEvent) => {
     e.preventDefault();
 
-    if (!confirm('Pause this research run? You can resume it later.')) {
+    if (!confirm("Pause this research run? You can resume it later.")) {
       return;
     }
 
-    setPausingRuns(prev => new Set(prev).add(runId));
+    setPausingRuns((prev) => new Set(prev).add(runId));
 
     try {
-      const response = await fetch('/api/runs/pause', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId })
+      const response = await fetch("/api/runs/pause", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to pause run');
+        throw new Error(error.error || "Failed to pause run");
       }
 
       // Force refresh the run data immediately
       await refreshRun(runId);
     } catch (error) {
-      console.error('Error pausing run:', error);
-      alert(`Failed to pause run: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error pausing run:", error);
+      alert(
+        `Failed to pause run: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     } finally {
-      setPausingRuns(prev => {
+      setPausingRuns((prev) => {
         const newSet = new Set(prev);
         newSet.delete(runId);
         return newSet;
@@ -97,34 +103,38 @@ export function RunsList({ initialRuns }: RunsListProps) {
   const handleResumeRun = async (runId: string, e: React.MouseEvent) => {
     e.preventDefault();
 
-    if (!confirm('Resume this research run?')) {
+    if (!confirm("Resume this research run?")) {
       return;
     }
 
-    setResumingRuns(prev => new Set(prev).add(runId));
+    setResumingRuns((prev) => new Set(prev).add(runId));
 
     try {
-      const response = await fetch('/api/runs/resume', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId })
+      const response = await fetch("/api/runs/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to resume run');
+        throw new Error(error.error || "Failed to resume run");
       }
 
       const result = await response.json();
-      console.log(`Resumed run, triggered ${result.pendingLeadsTriggered} pending leads`);
+      console.log(
+        `Resumed run, triggered ${result.pendingLeadsTriggered} pending leads`,
+      );
 
       // Force refresh the run data immediately
       await refreshRun(runId);
     } catch (error) {
-      console.error('Error resuming run:', error);
-      alert(`Failed to resume run: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error resuming run:", error);
+      alert(
+        `Failed to resume run: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     } finally {
-      setResumingRuns(prev => {
+      setResumingRuns((prev) => {
         const newSet = new Set(prev);
         newSet.delete(runId);
         return newSet;
@@ -136,37 +146,41 @@ export function RunsList({ initialRuns }: RunsListProps) {
     e.preventDefault();
 
     // Find the run to get its details for potential recreation
-    const run = runs.find(r => r.id === runId);
+    const run = runs.find((r) => r.id === runId);
     if (!run) {
-      alert('Run not found in local state');
+      alert("Run not found in local state");
       return;
     }
 
-    if (!confirm('Restart processing from existing database leads?\n\nThis will:\n- Use ONLY leads already scraped (no new scraping)\n- Prescreen any unscreened leads\n- Research any unresearched leads\n- Reset any stuck leads\n\nUse this when research gets stuck or needs to be rerun.')) {
+    if (
+      !confirm(
+        "Restart processing from existing database leads?\n\nThis will:\n- Use ONLY leads already scraped (no new scraping)\n- Prescreen any unscreened leads\n- Research any unresearched leads\n- Reset any stuck leads\n\nUse this when research gets stuck or needs to be rerun.",
+      )
+    ) {
       return;
     }
 
-    setRestartingRuns(prev => new Set(prev).add(runId));
+    setRestartingRuns((prev) => new Set(prev).add(runId));
 
     try {
-      const response = await fetch('/api/runs/force-restart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId })
+      const response = await fetch("/api/runs/force-restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
       });
 
       if (!response.ok) {
         const error = await response.json();
 
         // If run not found, offer to create a fresh research run
-        if (error.error === 'Run not found' || response.status === 404) {
+        if (error.error === "Run not found" || response.status === 404) {
           // Check if there are orphaned leads
           if (error.orphanedLeads && error.orphanedLeads > 0) {
             alert(
               `⚠️ ${error.message}\n\n` +
-              `Please delete this run from the UI and create a new one.`
+                `Please delete this run from the UI and create a new one.`,
             );
-            setRestartingRuns(prev => {
+            setRestartingRuns((prev) => {
               const newSet = new Set(prev);
               newSet.delete(runId);
               return newSet;
@@ -176,11 +190,11 @@ export function RunsList({ initialRuns }: RunsListProps) {
 
           const confirmFresh = confirm(
             `⚠️ Run not found in database.\n\n` +
-            `Would you like to create a fresh research run instead?\n\n` +
-            `This will create a new run with:\n` +
-            `• Business type: ${run.business_type}\n` +
-            `• Location: ${run.location}\n` +
-            `• Target: ${run.target_count} leads`
+              `Would you like to create a fresh research run instead?\n\n` +
+              `This will create a new run with:\n` +
+              `• Business type: ${run.business_type}\n` +
+              `• Location: ${run.location}\n` +
+              `• Target: ${run.target_count} leads`,
           );
 
           if (confirmFresh) {
@@ -190,7 +204,7 @@ export function RunsList({ initialRuns }: RunsListProps) {
             return;
           } else {
             // User declined, just clean up the UI
-            setRestartingRuns(prev => {
+            setRestartingRuns((prev) => {
               const newSet = new Set(prev);
               newSet.delete(runId);
               return newSet;
@@ -199,20 +213,28 @@ export function RunsList({ initialRuns }: RunsListProps) {
           }
         }
 
-        throw new Error(error.error || error.details || 'Failed to restart run');
+        throw new Error(
+          error.error || error.details || "Failed to restart run",
+        );
       }
 
       const result = await response.json();
-      console.log(`Force restarted: ${result.leadsRestarted} leads (${result.stuckLeadsReset} were stuck)`);
-      alert(`✅ Successfully restarted research for ${result.leadsRestarted} leads${result.stuckLeadsReset > 0 ? `\n${result.stuckLeadsReset} stuck leads were reset` : ''}`);
+      console.log(
+        `Force restarted: ${result.leadsRestarted} leads (${result.stuckLeadsReset} were stuck)`,
+      );
+      alert(
+        `✅ Successfully restarted research for ${result.leadsRestarted} leads${result.stuckLeadsReset > 0 ? `\n${result.stuckLeadsReset} stuck leads were reset` : ""}`,
+      );
 
       // Force refresh the run data immediately
       await refreshRun(runId);
     } catch (error) {
-      console.error('Error force restarting run:', error);
-      alert(`Failed to restart run: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error force restarting run:", error);
+      alert(
+        `Failed to restart run: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     } finally {
-      setRestartingRuns(prev => {
+      setRestartingRuns((prev) => {
         const newSet = new Set(prev);
         newSet.delete(runId);
         return newSet;
@@ -220,31 +242,38 @@ export function RunsList({ initialRuns }: RunsListProps) {
     }
   };
 
-  const handleRestartPrescreening = async (runId: string, e: React.MouseEvent) => {
+  const handleRestartPrescreening = async (
+    runId: string,
+    e: React.MouseEvent,
+  ) => {
     e.preventDefault();
 
-    const run = runs.find(r => r.id === runId);
+    const run = runs.find((r) => r.id === runId);
     if (!run) {
-      alert('Run not found');
+      alert("Run not found");
       return;
     }
 
-    if (!confirm('Restart prescreening for this run?\n\nThis will re-check all leads to identify franchises and national brands.')) {
+    if (
+      !confirm(
+        "Restart prescreening for this run?\n\nThis will re-check all leads to identify franchises and national brands.",
+      )
+    ) {
       return;
     }
 
-    setPrescreeningRuns(prev => new Set(prev).add(runId));
+    setPrescreeningRuns((prev) => new Set(prev).add(runId));
 
     try {
-      const response = await fetch('/api/runs/restart-prescreen', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId })
+      const response = await fetch("/api/runs/restart-prescreen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
       });
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error || 'Failed to restart prescreening');
+        throw new Error(error.error || "Failed to restart prescreening");
       }
 
       const result = await response.json();
@@ -253,10 +282,12 @@ export function RunsList({ initialRuns }: RunsListProps) {
       // Force refresh the run data immediately
       await refreshRun(runId);
     } catch (error) {
-      console.error('Error restarting prescreening:', error);
-      alert(`Failed to restart prescreening: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error("Error restarting prescreening:", error);
+      alert(
+        `Failed to restart prescreening: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
     } finally {
-      setPrescreeningRuns(prev => {
+      setPrescreeningRuns((prev) => {
         const newSet = new Set(prev);
         newSet.delete(runId);
         return newSet;
@@ -267,30 +298,118 @@ export function RunsList({ initialRuns }: RunsListProps) {
   const handleResearchAll = async (runId: string, e: React.MouseEvent) => {
     e.preventDefault(); // Prevent navigation
 
-    if (!confirm('Start researching all pending leads in this run?')) {
+    if (!confirm("Start researching all pending leads in this run?")) {
       return;
     }
 
-    setResearchingRuns(prev => new Set(prev).add(runId));
+    setResearchingRuns((prev) => new Set(prev).add(runId));
 
     try {
-      const response = await fetch('/api/inngest/trigger-research-all', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ runId })
+      const response = await fetch("/api/inngest/trigger-research-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to trigger research');
+        throw new Error("Failed to trigger research");
       }
 
       // Force refresh the run data immediately
       await refreshRun(runId);
     } catch (error) {
-      console.error('Error triggering research all:', error);
-      alert('Failed to start research. Please try again.');
+      console.error("Error triggering research all:", error);
+      alert("Failed to start research. Please try again.");
     } finally {
-      setResearchingRuns(prev => {
+      setResearchingRuns((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(runId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleResetRun = async (runId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation
+
+    if (
+      !confirm(
+        "Reset this run to start fresh?\n\nThis will:\n- Clear all grades and research data\n- Reset progress to 0%\n- Clear prescreening data (franchises will be re-checked)\n- Keep the scraped business info (names, addresses, etc.)\n\nThe run will be ready to prescreen and research again.",
+      )
+    ) {
+      return;
+    }
+
+    setClearingRuns((prev) => new Set(prev).add(runId));
+
+    try {
+      const response = await fetch("/api/runs/clear-research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to reset run");
+      }
+
+      const result = await response.json();
+      alert(`✅ ${result.message}`);
+
+      // Force refresh the run data immediately
+      await refreshRun(runId);
+    } catch (error) {
+      console.error("Error resetting run:", error);
+      alert(
+        `Failed to reset run: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    } finally {
+      setClearingRuns((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(runId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleMarkComplete = async (runId: string, e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation
+
+    if (
+      !confirm(
+        "Mark this run as complete?\n\nThis will:\n- Set progress to 100%\n- Set status to 'completed'\n- Stop any active research\n\nYou can still view and export the results.",
+      )
+    ) {
+      return;
+    }
+
+    setCompletingRuns((prev) => new Set(prev).add(runId));
+
+    try {
+      const response = await fetch("/api/runs/mark-complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runId }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to mark run as complete");
+      }
+
+      const result = await response.json();
+      alert(`✅ ${result.message}`);
+
+      // Force refresh the run data immediately
+      await refreshRun(runId);
+    } catch (error) {
+      console.error("Error marking run as complete:", error);
+      alert(
+        `Failed to mark run as complete: ${error instanceof Error ? error.message : "Unknown error"}`,
+      );
+    } finally {
+      setCompletingRuns((prev) => {
         const newSet = new Set(prev);
         newSet.delete(runId);
         return newSet;
@@ -301,24 +420,25 @@ export function RunsList({ initialRuns }: RunsListProps) {
   const handleDeleteRun = async (runId: string, e: React.MouseEvent) => {
     e.preventDefault(); // Prevent navigation
 
-    if (!confirm('Are you sure you want to delete this run? This will also delete all associated leads.')) {
+    if (
+      !confirm(
+        "Are you sure you want to delete this run? This will also delete all associated leads.",
+      )
+    ) {
       return;
     }
 
     try {
       const supabase = createClient();
-      const { error } = await supabase
-        .from('runs')
-        .delete()
-        .eq('id', runId);
+      const { error } = await supabase.from("runs").delete().eq("id", runId);
 
       if (error) throw error;
 
       // Update local state immediately
       setRuns((current) => current.filter((run) => run.id !== runId));
     } catch (error) {
-      console.error('Error deleting run:', error);
-      alert('Failed to delete run');
+      console.error("Error deleting run:", error);
+      alert("Failed to delete run");
     }
   };
 
@@ -327,28 +447,34 @@ export function RunsList({ initialRuns }: RunsListProps) {
 
     // Subscribe to real-time updates for runs
     const channel = supabase
-      .channel('runs-changes')
+      .channel("runs-changes")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'runs',
+          event: "*",
+          schema: "public",
+          table: "runs",
         },
         (payload) => {
-          console.log('[Realtime] Runs update:', payload.eventType, payload.new);
-          if (payload.eventType === 'INSERT') {
+          console.log(
+            "[Realtime] Runs update:",
+            payload.eventType,
+            payload.new,
+          );
+          if (payload.eventType === "INSERT") {
             setRuns((current) => [payload.new as Run, ...current]);
-          } else if (payload.eventType === 'UPDATE') {
+          } else if (payload.eventType === "UPDATE") {
             setRuns((current) =>
               current.map((run) =>
-                run.id === payload.new.id ? (payload.new as Run) : run
-              )
+                run.id === payload.new.id ? (payload.new as Run) : run,
+              ),
             );
-          } else if (payload.eventType === 'DELETE') {
-            setRuns((current) => current.filter((run) => run.id !== payload.old.id));
+          } else if (payload.eventType === "DELETE") {
+            setRuns((current) =>
+              current.filter((run) => run.id !== payload.old.id),
+            );
           }
-        }
+        },
       )
       .subscribe();
 
@@ -359,26 +485,30 @@ export function RunsList({ initialRuns }: RunsListProps) {
       setRuns((currentRuns) => {
         // Check if there are any active runs
         const activeRuns = currentRuns.filter(
-          (run) => run.status === 'scraping' ||
-                   run.status === 'prescreening' ||
-                   run.status === 'researching' ||
-                   run.status === 'ready' ||
-                   run.status === 'pending'
+          (run) =>
+            run.status === "scraping" ||
+            run.status === "prescreening" ||
+            run.status === "researching" ||
+            run.status === "ready" ||
+            run.status === "pending",
         );
 
         if (activeRuns.length > 0) {
           // Fetch updated data for active runs
           supabase
-            .from('runs')
-            .select('*')
-            .in('id', activeRuns.map((r) => r.id))
+            .from("runs")
+            .select("*")
+            .in(
+              "id",
+              activeRuns.map((r) => r.id),
+            )
             .then(({ data: updatedRuns }) => {
               if (updatedRuns) {
                 setRuns((current) =>
                   current.map((run) => {
                     const updated = updatedRuns.find((ur) => ur.id === run.id);
                     return updated ? (updated as Run) : run;
-                  })
+                  }),
                 );
               }
             });
@@ -398,7 +528,9 @@ export function RunsList({ initialRuns }: RunsListProps) {
     return (
       <div className="text-center py-12 bg-white rounded-lg shadow">
         <p className="text-gray-500 mb-4">No research runs yet</p>
-        <p className="text-sm text-gray-400">Create your first run to start finding leads</p>
+        <p className="text-sm text-gray-400">
+          Create your first run to start finding leads
+        </p>
       </div>
     );
   }
@@ -416,45 +548,53 @@ export function RunsList({ initialRuns }: RunsListProps) {
                 {run.business_type} in {run.location}
               </h3>
               <p className="text-sm text-gray-500 mt-1">
-                Target: {run.target_count} leads • Created {formatDateAU(run.created_at)}
+                Target: {run.target_count} leads • Created{" "}
+                {formatDateAU(run.created_at)}
               </p>
             </Link>
             <div className="flex items-center gap-2">
               <StatusBadge status={run.status} isPaused={run.is_paused} />
 
               {/* Restart Prescreening Button - show when status is "ready" or "researching" */}
-              {(run.status === 'ready' || run.status === 'researching' || run.status === 'scraping' || run.status === 'prescreening') && (
+              {(run.status === "ready" ||
+                run.status === "researching" ||
+                run.status === "scraping" ||
+                run.status === "prescreening") && (
                 <button
                   onClick={(e) => handleRestartPrescreening(run.id, e)}
                   disabled={prescreeningRuns.has(run.id)}
                   className="px-3 py-1 bg-cyan-600 text-white rounded text-xs font-medium hover:bg-cyan-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                   title="Restart prescreening to re-identify franchises"
                 >
-                  {prescreeningRuns.has(run.id) ? 'Prescreening...' : '🔍 Restart Prescreen'}
+                  {prescreeningRuns.has(run.id)
+                    ? "Prescreening..."
+                    : "🔍 Restart Prescreen"}
                 </button>
               )}
 
               {/* Research All Button - show when status is "ready" */}
-              {run.status === 'ready' && (
+              {run.status === "ready" && (
                 <button
                   onClick={(e) => handleResearchAll(run.id, e)}
                   disabled={researchingRuns.has(run.id)}
                   className="px-3 py-1 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                   title="Research all pending leads"
                 >
-                  {researchingRuns.has(run.id) ? 'Starting...' : '🔬 Research All'}
+                  {researchingRuns.has(run.id)
+                    ? "Starting..."
+                    : "🔬 Research All"}
                 </button>
               )}
 
               {/* Pause Button - show when researching and not paused */}
-              {run.status === 'researching' && !run.is_paused && (
+              {run.status === "researching" && !run.is_paused && (
                 <button
                   onClick={(e) => handlePauseRun(run.id, e)}
                   disabled={pausingRuns.has(run.id)}
                   className="px-3 py-1 bg-orange-600 text-white rounded text-xs font-medium hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                   title="Pause research"
                 >
-                  {pausingRuns.has(run.id) ? 'Pausing...' : '⏸ Pause'}
+                  {pausingRuns.has(run.id) ? "Pausing..." : "⏸ Pause"}
                 </button>
               )}
 
@@ -466,19 +606,33 @@ export function RunsList({ initialRuns }: RunsListProps) {
                   className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                   title="Resume research"
                 >
-                  {resumingRuns.has(run.id) ? 'Resuming...' : '▶ Resume'}
+                  {resumingRuns.has(run.id) ? "Resuming..." : "▶ Resume"}
                 </button>
               )}
 
               {/* Force Restart Button - show when researching (as fallback) */}
-              {run.status === 'researching' && (
+              {run.status === "researching" && (
                 <button
                   onClick={(e) => handleForceRestart(run.id, e)}
                   disabled={restartingRuns.has(run.id)}
                   className="px-3 py-1 bg-indigo-600 text-white rounded text-xs font-medium hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                   title="Force restart research (use if pause/resume fails)"
                 >
-                  {restartingRuns.has(run.id) ? 'Restarting...' : '🔄 Restart'}
+                  {restartingRuns.has(run.id) ? "Restarting..." : "🔄 Restart"}
+                </button>
+              )}
+
+              {/* Mark Complete Button - show when researching or ready */}
+              {(run.status === "researching" || run.status === "ready") && (
+                <button
+                  onClick={(e) => handleMarkComplete(run.id, e)}
+                  disabled={completingRuns.has(run.id)}
+                  className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  title="Mark run as complete (sets progress to 100%)"
+                >
+                  {completingRuns.has(run.id)
+                    ? "Completing..."
+                    : "✓ Mark Complete"}
                 </button>
               )}
 
@@ -487,8 +641,17 @@ export function RunsList({ initialRuns }: RunsListProps) {
                 className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded transition-colors"
                 title="Delete run"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z"
+                    clipRule="evenodd"
+                  />
                 </svg>
               </button>
             </div>
@@ -496,7 +659,7 @@ export function RunsList({ initialRuns }: RunsListProps) {
 
           <Link href={`/dashboard/runs/${run.id}`} className="block">
             {/* Progress Bar */}
-            {run.status !== 'failed' && (
+            {run.status !== "failed" && (
               <div className="mb-4">
                 <div className="flex justify-between text-sm text-gray-600 mb-1">
                   <span>Progress</span>
@@ -543,21 +706,27 @@ export function RunsList({ initialRuns }: RunsListProps) {
   );
 }
 
-function StatusBadge({ status, isPaused }: { status: string; isPaused?: boolean }) {
+function StatusBadge({
+  status,
+  isPaused,
+}: {
+  status: string;
+  isPaused?: boolean;
+}) {
   const styles: Record<string, string> = {
-    pending: 'bg-gray-100 text-gray-700',
-    scraping: 'bg-blue-100 text-blue-700',
-    prescreening: 'bg-indigo-100 text-indigo-700',
-    ready: 'bg-yellow-100 text-yellow-700',
-    researching: 'bg-purple-100 text-purple-700',
-    paused: 'bg-orange-100 text-orange-700',
-    completed: 'bg-green-100 text-green-700',
-    failed: 'bg-red-100 text-red-700',
+    pending: "bg-gray-100 text-gray-700",
+    scraping: "bg-blue-100 text-blue-700",
+    prescreening: "bg-indigo-100 text-indigo-700",
+    ready: "bg-yellow-100 text-yellow-700",
+    researching: "bg-purple-100 text-purple-700",
+    paused: "bg-orange-100 text-orange-700",
+    completed: "bg-green-100 text-green-700",
+    failed: "bg-red-100 text-red-700",
   };
 
-  const displayStatus = isPaused ? 'paused' : status;
+  const displayStatus = isPaused ? "paused" : status;
   const displayText = isPaused
-    ? '⏸ Paused'
+    ? "⏸ Paused"
     : status.charAt(0).toUpperCase() + status.slice(1);
 
   return (

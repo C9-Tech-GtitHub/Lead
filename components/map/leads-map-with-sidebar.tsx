@@ -145,6 +145,27 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
     }
   };
 
+  const handleGradeUpdate = async (leadId: string, newGrade: string) => {
+    try {
+      const response = await fetch("/api/leads/update-grade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, grade: newGrade }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update grade");
+      }
+
+      // The realtime subscription will update the UI automatically
+      // But we can show a success message
+      console.log(`Lead ${leadId} updated to grade ${newGrade}`);
+    } catch (error) {
+      console.error("Error updating grade:", error);
+      alert("Failed to update lead grade. Please try again.");
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-64px)]">
       {/* Sidebar */}
@@ -254,64 +275,16 @@ export function LeadsMapWithSidebar({ runs, leads }: LeadsMapWithSidebarProps) {
       </div>
 
       {/* Map Container */}
-      <div className="flex-1 relative">
-        {/* Legend */}
-        <div className="absolute top-4 left-4 right-4 z-10 bg-white rounded-lg shadow-lg p-4 border border-gray-200">
-          <h3 className="font-semibold mb-2 text-gray-900">Grade Legend:</h3>
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-green-500"></div>
-              <span className="text-sm text-gray-900 font-medium">
-                Grade A - Excellent Match
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-blue-500"></div>
-              <span className="text-sm text-gray-900 font-medium">
-                Grade B - Good Match
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-yellow-500"></div>
-              <span className="text-sm text-gray-900 font-medium">
-                Grade C - Average Match
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-              <span className="text-sm text-gray-900 font-medium">
-                Grade D - Below Average
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-red-500"></div>
-              <span className="text-sm text-gray-900 font-medium">
-                Grade F - Poor Match
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-gray-500"></div>
-              <span className="text-sm text-gray-900 font-medium">
-                Not yet graded
-              </span>
-            </div>
-          </div>
-          <div className="mt-2 text-sm text-gray-700">
-            Showing{" "}
-            <span className="font-semibold">{leadsWithCoordinates.length}</span>{" "}
-            of <span className="font-semibold">{filteredLeads.length}</span>{" "}
-            leads
-            {filteredLeads.length > leadsWithCoordinates.length &&
-              ` (${filteredLeads.length - leadsWithCoordinates.length} without coordinates)`}
-          </div>
+      <div className="flex-1 relative flex flex-col p-4">
+        {/* Map - now with controls built-in */}
+        <div className="flex-1">
+          <LeadsMap
+            leads={filteredLeads}
+            height="100%"
+            onMarkerClick={handleMarkerClick}
+            onGradeUpdate={handleGradeUpdate}
+          />
         </div>
-
-        {/* Map */}
-        <LeadsMap
-          leads={filteredLeads}
-          height="100%"
-          onMarkerClick={handleMarkerClick}
-        />
       </div>
 
       {/* Lead Details Modal */}
