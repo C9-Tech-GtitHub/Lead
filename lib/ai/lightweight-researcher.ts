@@ -71,9 +71,9 @@ export async function lightweightResearchLead(
     // Construct the analysis prompt with all available data
     const userPrompt = buildAnalysisPrompt(params);
 
-    // Call GPT-5 WITHOUT web search - rely only on provided content
+    // Call GPT-5-mini WITHOUT web search - rely only on provided content
     const response = await openai.responses.create({
-      model: "gpt-5",
+      model: "gpt-5-mini",
       reasoning: { effort: "low" },
       max_output_tokens: 1500, // Reduced from 2000
       // NO TOOLS - no web search
