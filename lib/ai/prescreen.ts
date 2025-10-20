@@ -28,10 +28,17 @@ interface PrescreenResult {
   confidence: "high" | "medium" | "low";
 }
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization of OpenAI client to avoid build-time errors
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 /**
  * Prescreen a lead to determine if it's worth researching
@@ -42,6 +49,7 @@ export async function prescreenLead(
 ): Promise<PrescreenResult> {
   try {
     console.log(`[Prescreen] Checking: ${params.name}`);
+    const openai = getOpenAIClient();
 
     const userPrompt = buildPrescreenPrompt(params);
 
@@ -289,6 +297,7 @@ Independent businesses: Unique local names, single locations, owner-operated bus
 Provide your classification for all ${leads.length} businesses:`;
 
     // Make single API call
+    const openai = getOpenAIClient();
     const response = await openai.responses.create({
       model: "gpt-5",
       reasoning: { effort: "low" },

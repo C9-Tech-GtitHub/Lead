@@ -36,16 +36,24 @@ interface LeadAnalysis {
   opportunities?: string[] | null;
 }
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialization of OpenAI client to avoid build-time errors
+let openaiClient: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 export async function deepResearchLead(
   params: ResearchLeadParams,
 ): Promise<LeadAnalysis> {
   try {
     console.log(`[DEEP AI Researcher] Analyzing lead: ${params.name}`);
+    const openai = getOpenAIClient();
 
     // Construct the analysis prompt with all available data
     const userPrompt = buildAnalysisPrompt(params);
