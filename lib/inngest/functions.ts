@@ -663,7 +663,7 @@ export const researchIndividualLead = inngest.createFunction(
           .from("leads")
           .update({
             research_status: "completed",
-            // research_depth: "lightweight", // TODO: Re-enable after adding column to database
+            research_depth: "lightweight",
             ai_report: analysis.report,
             compatibility_grade: analysis.grade,
             grade_reasoning: analysis.gradeReasoning,
@@ -1192,7 +1192,7 @@ export const deepResearchIndividualLead = inngest.createFunction(
         .from("leads")
         .update({
           research_status: "completed",
-          // research_depth: "deep", // TODO: Re-enable after adding column to database
+          research_depth: "deep",
           ai_report: analysis.report,
           compatibility_grade: analysis.grade,
           grade_reasoning: analysis.gradeReasoning,
