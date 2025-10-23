@@ -660,6 +660,9 @@ export function LeadsDashboard({
                     Email Status
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Last Sent
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Status
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -718,6 +721,9 @@ export function LeadsDashboard({
                     </td>
                     <td className="px-4 py-3">
                       <EmailStatusBadge lead={lead} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <LastSentDate lead={lead} />
                     </td>
                     <td className="px-4 py-3">
                       <select
@@ -863,6 +869,58 @@ function GradeBadge({ grade }: { grade: string }) {
     >
       {grade}
     </span>
+  );
+}
+
+function LastSentDate({ lead }: { lead: Lead }) {
+  // Get last contacted date from multiple sources
+  const lastSentAt =
+    lead.last_email_sent_at || lead.contactHistory?.last_contacted_at;
+
+  if (!lastSentAt) {
+    return (
+      <span className="text-xs text-gray-400 dark:text-gray-500">Never</span>
+    );
+  }
+
+  const date = new Date(lastSentAt);
+  const now = new Date();
+  const diffDays = Math.floor(
+    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  // Format the date
+  const formattedDate = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  });
+
+  // Show relative time if recent
+  let relativeTime = "";
+  if (diffDays === 0) {
+    relativeTime = "Today";
+  } else if (diffDays === 1) {
+    relativeTime = "Yesterday";
+  } else if (diffDays < 7) {
+    relativeTime = `${diffDays}d ago`;
+  } else if (diffDays < 30) {
+    relativeTime = `${Math.floor(diffDays / 7)}w ago`;
+  } else if (diffDays < 365) {
+    relativeTime = `${Math.floor(diffDays / 30)}mo ago`;
+  } else {
+    relativeTime = `${Math.floor(diffDays / 365)}y ago`;
+  }
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-xs text-gray-700 dark:text-gray-300 font-medium">
+        {relativeTime}
+      </span>
+      <span className="text-xs text-gray-500 dark:text-gray-400">
+        {formattedDate}
+      </span>
+    </div>
   );
 }
 

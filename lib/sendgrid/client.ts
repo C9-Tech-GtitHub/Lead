@@ -47,6 +47,17 @@ export interface SendGridInvalidEmail {
   reason: string;
 }
 
+export interface SendGridEmailActivity {
+  msg_id: string;
+  from_email: string;
+  to_email: string;
+  subject: string;
+  status: string;
+  opens_count?: number;
+  clicks_count?: number;
+  last_event_time: string;
+}
+
 export interface SyncResult {
   success: boolean;
   recordsSynced: number;
@@ -231,6 +242,46 @@ class SendGridReadOnlyClient {
     );
 
     return response;
+  }
+
+  /**
+   * Get email activity from SendGrid Email Activity Feed API
+   * Note: Requires Email Activity access on the API key
+   * Returns recent email sends with delivery status
+   */
+  async getEmailActivity(
+    limit: number = 10,
+    query?: string,
+  ): Promise<{ messages: SendGridEmailActivity[] }> {
+    const params: Record<string, any> = {
+      limit,
+    };
+
+    if (query) {
+      params.query = query;
+    }
+
+    try {
+      const response = await this.makeRequest<{
+        messages: SendGridEmailActivity[];
+      }>("GET", "/v3/messages", params);
+      return response;
+    } catch (error: any) {
+      // If we get a 403, the API key doesn't have Email Activity access
+      if (
+        error.message.includes("403") ||
+        error.message.includes("forbidden")
+      ) {
+        console.warn("⚠️  Email Activity API not accessible. This requires:");
+        console.warn(
+          '   1. Purchase "Additional Email Activity History" add-on',
+        );
+        console.warn("   2. API key with Email Activity permissions");
+        console.warn("   Falling back to suppression data only.");
+        return { messages: [] };
+      }
+      throw error;
+    }
   }
 }
 
