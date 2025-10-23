@@ -270,7 +270,8 @@ class SendGridReadOnlyClient {
       // If we get a 403, the API key doesn't have Email Activity access
       if (
         error.message.includes("403") ||
-        error.message.includes("forbidden")
+        error.message.includes("forbidden") ||
+        error.message.includes("authorization")
       ) {
         console.warn("⚠️  Email Activity API not accessible. This requires:");
         console.warn(
@@ -282,6 +283,29 @@ class SendGridReadOnlyClient {
       }
       throw error;
     }
+  }
+
+  /**
+   * Get email statistics from SendGrid Stats API
+   * This shows aggregate data like sends, opens, clicks
+   */
+  async getStats(
+    startDate: string,
+    endDate?: string,
+    aggregatedBy: "day" | "week" | "month" = "day",
+  ): Promise<any> {
+    const params: Record<string, string> = {
+      start_date: startDate,
+      aggregated_by: aggregatedBy,
+    };
+
+    if (endDate) {
+      params.end_date = endDate;
+    }
+
+    const response = await this.makeRequest<any>("GET", "/v3/stats", params);
+
+    return response;
   }
 }
 

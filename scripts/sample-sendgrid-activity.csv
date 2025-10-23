@@ -1,0 +1,9 @@
+processed,message_id,event,email,subject,from,reason,type
+1729555200,msg_001,processed,john@example.com,Test Email,noreply@yourdomain.com,,
+1729555201,msg_001,delivered,john@example.com,Test Email,noreply@yourdomain.com,,
+1729555300,msg_001,open,john@example.com,Test Email,noreply@yourdomain.com,,
+1729555400,msg_001,click,john@example.com,Test Email,noreply@yourdomain.com,,
+1729555500,msg_002,processed,info@testcompany.com,Follow Up,noreply@yourdomain.com,,
+1729555501,msg_002,delivered,info@testcompany.com,Follow Up,noreply@yourdomain.com,,
+1729555600,msg_003,processed,contact@anotherbiz.com,Newsletter,noreply@yourdomain.com,,
+1729555601,msg_003,bounce,contact@anotherbiz.com,Newsletter,noreply@yourdomain.com,550 5.1.1 User unknown,hard

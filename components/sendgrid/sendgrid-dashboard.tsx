@@ -36,8 +36,17 @@ interface ContactTracking {
   created_at: string;
 }
 
-export function SendGridDashboard({ stats, recentSyncs }: SendGridDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"suppressions" | "contacts" | "syncs">("suppressions");
+export function SendGridDashboard({
+  stats,
+  recentSyncs,
+}: SendGridDashboardProps) {
+  // Feature flag: Enable to show contact tracking features
+  // Set to true after importing historical email data via CSV
+  const ENABLE_CONTACT_TRACKING = true;
+
+  const [activeTab, setActiveTab] = useState<
+    "suppressions" | "contacts" | "syncs"
+  >("suppressions");
   const [suppressions, setSuppressions] = useState<Suppression[]>([]);
   const [contacts, setContacts] = useState<ContactTracking[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,7 +75,9 @@ export function SendGridDashboard({ stats, recentSyncs }: SendGridDashboardProps
     }
 
     if (searchQuery) {
-      query = query.or(`email.ilike.%${searchQuery}%,domain.ilike.%${searchQuery}%`);
+      query = query.or(
+        `email.ilike.%${searchQuery}%,domain.ilike.%${searchQuery}%`,
+      );
     }
 
     const from = (currentPage - 1) * pageSize;
@@ -160,7 +171,9 @@ export function SendGridDashboard({ stats, recentSyncs }: SendGridDashboardProps
   return (
     <div className="space-y-6">
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div
+        className={`grid grid-cols-2 gap-4 ${ENABLE_CONTACT_TRACKING ? "md:grid-cols-5" : "md:grid-cols-4"}`}
+      >
         <StatCard
           label="Total Suppressions"
           value={stats.totalSuppressions}
@@ -181,11 +194,13 @@ export function SendGridDashboard({ stats, recentSyncs }: SendGridDashboardProps
           value={stats.invalid}
           color="bg-gray-100 dark:bg-gray-700"
         />
-        <StatCard
-          label="Contacted Domains"
-          value={stats.contactedDomains}
-          color="bg-blue-100 dark:bg-blue-900"
-        />
+        {ENABLE_CONTACT_TRACKING && (
+          <StatCard
+            label="Contacted Domains"
+            value={stats.contactedDomains}
+            color="bg-blue-100 dark:bg-blue-900"
+          />
+        )}
       </div>
 
       {/* Sync Button */}
@@ -230,19 +245,21 @@ export function SendGridDashboard({ stats, recentSyncs }: SendGridDashboardProps
           >
             Suppressions ({stats.totalSuppressions})
           </button>
-          <button
-            onClick={() => {
-              setActiveTab("contacts");
-              setCurrentPage(1);
-            }}
-            className={`${
-              activeTab === "contacts"
-                ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300"
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Contact Tracking ({stats.contactedDomains})
-          </button>
+          {ENABLE_CONTACT_TRACKING && (
+            <button
+              onClick={() => {
+                setActiveTab("contacts");
+                setCurrentPage(1);
+              }}
+              className={`${
+                activeTab === "contacts"
+                  ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300"
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+            >
+              Contact Tracking ({stats.contactedDomains})
+            </button>
+          )}
           <button
             onClick={() => setActiveTab("syncs")}
             className={`${
@@ -387,7 +404,10 @@ function SuppressionsTable({ suppressions }: { suppressions: Suppression[] }) {
   const formatSource = (source: string, asmGroupName?: string) => {
     if (source === "asm_group") {
       return asmGroupName
-        ? asmGroupName.replace(/^uncategorised-/i, "").charAt(0).toUpperCase() +
+        ? asmGroupName
+            .replace(/^uncategorised-/i, "")
+            .charAt(0)
+            .toUpperCase() +
             asmGroupName.replace(/^uncategorised-/i, "").slice(1)
         : "ASM Group";
     }
@@ -413,7 +433,9 @@ function SuppressionsTable({ suppressions }: { suppressions: Suppression[] }) {
   if (suppressions.length === 0) {
     return (
       <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow">
-        <p className="text-gray-500 dark:text-gray-400">No suppressions found</p>
+        <p className="text-gray-500 dark:text-gray-400">
+          No suppressions found
+        </p>
       </div>
     );
   }
@@ -443,7 +465,10 @@ function SuppressionsTable({ suppressions }: { suppressions: Suppression[] }) {
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {suppressions.map((suppression) => (
-              <tr key={suppression.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+              <tr
+                key={suppression.id}
+                className="hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-100">
                   {suppression.email}
                 </td>
@@ -454,7 +479,10 @@ function SuppressionsTable({ suppressions }: { suppressions: Suppression[] }) {
                   <span
                     className={`px-2 py-1 text-xs font-medium rounded ${getSourceColor(suppression.source)}`}
                   >
-                    {formatSource(suppression.source, suppression.asm_group_name)}
+                    {formatSource(
+                      suppression.source,
+                      suppression.asm_group_name,
+                    )}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500 dark:text-gray-400 max-w-xs truncate">
@@ -476,7 +504,9 @@ function ContactsTable({ contacts }: { contacts: ContactTracking[] }) {
   if (contacts.length === 0) {
     return (
       <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow">
-        <p className="text-gray-500 dark:text-gray-400">No contact history found</p>
+        <p className="text-gray-500 dark:text-gray-400">
+          No contact history found
+        </p>
       </div>
     );
   }
@@ -510,13 +540,18 @@ function ContactsTable({ contacts }: { contacts: ContactTracking[] }) {
               const isOnHold = canContactAfter > new Date();
 
               return (
-                <tr key={contact.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <tr
+                  key={contact.id}
+                  className="hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                     {contact.domain}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {contact.first_contacted_at
-                      ? new Date(contact.first_contacted_at).toLocaleDateString()
+                      ? new Date(
+                          contact.first_contacted_at,
+                        ).toLocaleDateString()
                       : "-"}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
@@ -550,7 +585,9 @@ function SyncHistoryTable({ syncs }: { syncs: any[] }) {
   if (syncs.length === 0) {
     return (
       <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow">
-        <p className="text-gray-500 dark:text-gray-400">No sync history found</p>
+        <p className="text-gray-500 dark:text-gray-400">
+          No sync history found
+        </p>
       </div>
     );
   }
@@ -583,7 +620,10 @@ function SyncHistoryTable({ syncs }: { syncs: any[] }) {
           </thead>
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {syncs.map((sync) => (
-              <tr key={sync.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+              <tr
+                key={sync.id}
+                className="hover:bg-gray-50 dark:hover:bg-gray-700"
+              >
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">
                   {sync.sync_type}
                 </td>
