@@ -1293,6 +1293,237 @@ export const deepResearchMultipleLeads = inngest.createFunction(
 );
 
 // Export all functions
+// ============================================
+// SendGrid Daily Sync
+// ============================================
+// Scheduled function to sync SendGrid suppressions daily
+export const dailySendGridSync = inngest.createFunction(
+  {
+    id: "daily-sendgrid-sync",
+    name: "Daily SendGrid Suppression Sync",
+    retries: 2,
+  },
+  { cron: "0 2 * * *" }, // Run daily at 2 AM UTC
+  async ({ step }) => {
+    const supabase = createAdminClient();
+
+    await step.run("sync-sendgrid-data", async () => {
+      console.log("Starting scheduled SendGrid sync...");
+
+      // Import the sync functions
+      const { default: client } = await import("@sendgrid/client");
+
+      // Initialize SendGrid client
+      const apiKey = process.env.SENDGRID_API_KEY;
+      if (!apiKey) {
+        throw new Error("SENDGRID_API_KEY not configured");
+      }
+      client.setApiKey(apiKey);
+
+      // Helper function to extract domain from email
+      const extractDomain = (email: string): string => {
+        return email.toLowerCase().split("@")[1] || "";
+      };
+
+      let totalSynced = 0;
+
+      // Sync Bounces
+      console.log("Syncing bounces...");
+      const { data: lastBounceSync } = await supabase
+        .from("sendgrid_sync_log")
+        .select("started_at")
+        .eq("sync_type", "bounces")
+        .eq("status", "success")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      const bounceStartTime = lastBounceSync
+        ? Math.floor(new Date(lastBounceSync.started_at).getTime() / 1000)
+        : undefined;
+
+      const [bounceResponse] = await client.request({
+        method: "GET",
+        url: "/v3/suppression/bounces",
+        qs: bounceStartTime ? { start_time: bounceStartTime } : {},
+      });
+
+      const bounces = bounceResponse.body as any[];
+
+      if (bounces.length > 0) {
+        const bounceRecords = bounces.map((b: any) => ({
+          email: b.email.toLowerCase(),
+          domain: extractDomain(b.email),
+          source: "bounce",
+          reason: b.reason,
+          sendgrid_created_at: new Date(b.created * 1000).toISOString(),
+          synced_from_sendgrid: true,
+        }));
+
+        await supabase.from("email_suppression").upsert(bounceRecords, {
+          onConflict: "email",
+        });
+
+        // Update leads
+        const domainSet = new Set(bounceRecords.map((r) => r.domain));
+        const domains = Array.from(domainSet);
+        await supabase
+          .from("leads")
+          .update({ email_status: "bounced" })
+          .in("email_domain", domains);
+
+        totalSynced += bounces.length;
+        console.log(`Synced ${bounces.length} bounces`);
+      }
+
+      // Sync Unsubscribes
+      console.log("Syncing unsubscribes...");
+      const { data: lastUnsubSync } = await supabase
+        .from("sendgrid_sync_log")
+        .select("started_at")
+        .eq("sync_type", "unsubscribes")
+        .eq("status", "success")
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      const unsubStartTime = lastUnsubSync
+        ? Math.floor(new Date(lastUnsubSync.started_at).getTime() / 1000)
+        : undefined;
+
+      const [unsubResponse] = await client.request({
+        method: "GET",
+        url: "/v3/suppression/unsubscribes",
+        qs: unsubStartTime ? { start_time: unsubStartTime } : {},
+      });
+
+      const unsubscribes = unsubResponse.body as any[];
+
+      if (unsubscribes.length > 0) {
+        const unsubRecords = unsubscribes.map((u: any) => ({
+          email: u.email.toLowerCase(),
+          domain: extractDomain(u.email),
+          source: "unsubscribe",
+          reason: u.reason || "User unsubscribed",
+          sendgrid_created_at: new Date(u.created * 1000).toISOString(),
+          synced_from_sendgrid: true,
+        }));
+
+        await supabase.from("email_suppression").upsert(unsubRecords, {
+          onConflict: "email",
+        });
+
+        // Update leads
+        const domainSet = new Set(unsubRecords.map((r) => r.domain));
+        const domains = Array.from(domainSet);
+        await supabase
+          .from("leads")
+          .update({ email_status: "unsubscribed" })
+          .in("email_domain", domains);
+
+        totalSynced += unsubscribes.length;
+        console.log(`Synced ${unsubscribes.length} unsubscribes`);
+      }
+
+      // Sync ASM Group Suppressions
+      console.log("Syncing ASM groups...");
+      const [groupsResponse] = await client.request({
+        method: "GET",
+        url: "/v3/asm/groups",
+      });
+
+      const asmGroups = groupsResponse.body as any[];
+      let asmSynced = 0;
+
+      for (const group of asmGroups) {
+        const [suppressionsResponse] = await client.request({
+          method: "GET",
+          url: `/v3/asm/groups/${group.id}/suppressions`,
+        });
+
+        const emails = suppressionsResponse.body as string[];
+
+        if (emails.length === 0) continue;
+
+        console.log(
+          `Processing ASM group ${group.name}: ${emails.length} total suppressions`,
+        );
+
+        // SMART OPTIMIZATION: Only sync NEW emails
+        const normalizedEmails = emails.map((e: string) => e.toLowerCase());
+
+        // Query existing emails for this group
+        const { data: existingEmails } = await supabase
+          .from("email_suppression")
+          .select("email")
+          .eq("asm_group_id", group.id);
+
+        const existingSet = new Set(
+          existingEmails?.map((row) => row.email) || [],
+        );
+
+        // Find only NEW emails
+        const newEmails = normalizedEmails.filter(
+          (email: string) => !existingSet.has(email),
+        );
+
+        console.log(
+          `  ${existingSet.size} already in DB, ${newEmails.length} new to sync`,
+        );
+
+        if (newEmails.length === 0) {
+          console.log(`  No new suppressions for ${group.name}`);
+          continue;
+        }
+
+        // Insert only new emails
+        const asmRecords = newEmails.map((email: string) => ({
+          email: email,
+          domain: extractDomain(email),
+          source: "asm_group",
+          reason: `Unsubscribed from: ${group.name}`,
+          asm_group_id: group.id,
+          asm_group_name: group.name,
+          synced_from_sendgrid: true,
+        }));
+
+        await supabase.from("email_suppression").insert(asmRecords);
+
+        // Update leads
+        const domainSet = new Set(asmRecords.map((r) => r.domain));
+        const domains = Array.from(domainSet);
+        await supabase
+          .from("leads")
+          .update({ email_status: "unsubscribed" })
+          .in("email_domain", domains);
+
+        asmSynced += newEmails.length;
+      }
+
+      totalSynced += asmSynced;
+      console.log(`Synced ${asmSynced} ASM group suppressions`);
+
+      // Log the sync
+      await supabase.from("sendgrid_sync_log").insert({
+        sync_type: "scheduled_full",
+        status: "success",
+        records_synced: totalSynced,
+        started_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+        triggered_by: "cron",
+      });
+
+      console.log(`Daily SendGrid sync complete: ${totalSynced} total records`);
+      return {
+        totalSynced,
+        bounces: bounces.length,
+        unsubscribes: unsubscribes.length,
+        asmGroups: asmSynced,
+      };
+    });
+  },
+);
+
 export const functions = [
   processLeadRun,
   researchIndividualLead,
@@ -1300,4 +1531,5 @@ export const functions = [
   deepResearchIndividualLead,
   deepResearchMultipleLeads,
   triggerPrescreen,
+  dailySendGridSync,
 ];

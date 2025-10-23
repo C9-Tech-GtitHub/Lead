@@ -136,7 +136,9 @@ export function LeadsMap({
 }: LeadsMapProps) {
   const [mounted, setMounted] = useState(false);
   const [leaflet, setLeaflet] = useState<typeof import("leaflet") | null>(null);
-  const [filterGrade, setFilterGrade] = useState<string>("all");
+  const [selectedGrades, setSelectedGrades] = useState<Set<string>>(
+    new Set(["A", "B", "C", "D", "F"]),
+  );
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
 
   // Only render map on client side to avoid SSR issues
@@ -161,8 +163,11 @@ export function LeadsMap({
   // Filter leads that have coordinates and match grade filter
   const leadsWithCoordinates = leads.filter((lead) => {
     if (!lead.latitude || !lead.longitude) return false;
-    if (filterGrade === "all") return true;
-    return lead.compatibility_grade === filterGrade;
+    // If no grades selected, show nothing
+    if (selectedGrades.size === 0) return false;
+    // If lead has no grade, only show if we're showing all grades
+    if (!lead.compatibility_grade) return selectedGrades.size === 5;
+    return selectedGrades.has(lead.compatibility_grade);
   });
 
   if (!mounted) {
@@ -214,6 +219,30 @@ export function LeadsMap({
     }
   };
 
+  const toggleGrade = (grade: string) => {
+    setSelectedGrades((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(grade)) {
+        newSet.delete(grade);
+      } else {
+        newSet.add(grade);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleAllGrades = () => {
+    if (selectedGrades.size === 5) {
+      // All selected, deselect all
+      setSelectedGrades(new Set());
+    } else {
+      // Some or none selected, select all
+      setSelectedGrades(new Set(["A", "B", "C", "D", "F"]));
+    }
+  };
+
+  const allSelected = selectedGrades.size === 5;
+
   return (
     <div className="w-full h-full flex flex-col gap-3">
       {/* Filter and City Jump Controls */}
@@ -221,9 +250,9 @@ export function LeadsMap({
         {/* Grade Filters */}
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setFilterGrade("all")}
+            onClick={toggleAllGrades}
             className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-              filterGrade === "all"
+              allSelected
                 ? "bg-blue-600 text-white"
                 : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
             }`}
@@ -231,9 +260,9 @@ export function LeadsMap({
             All
           </button>
           <button
-            onClick={() => setFilterGrade("A")}
+            onClick={() => toggleGrade("A")}
             className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-              filterGrade === "A"
+              selectedGrades.has("A")
                 ? "bg-green-600 text-white"
                 : "bg-white text-green-600 border border-green-300 hover:bg-green-50"
             }`}
@@ -241,9 +270,9 @@ export function LeadsMap({
             A
           </button>
           <button
-            onClick={() => setFilterGrade("B")}
+            onClick={() => toggleGrade("B")}
             className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-              filterGrade === "B"
+              selectedGrades.has("B")
                 ? "bg-blue-600 text-white"
                 : "bg-white text-blue-600 border border-blue-300 hover:bg-blue-50"
             }`}
@@ -251,9 +280,9 @@ export function LeadsMap({
             B
           </button>
           <button
-            onClick={() => setFilterGrade("C")}
+            onClick={() => toggleGrade("C")}
             className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-              filterGrade === "C"
+              selectedGrades.has("C")
                 ? "bg-yellow-600 text-white"
                 : "bg-white text-yellow-600 border border-yellow-300 hover:bg-yellow-50"
             }`}
@@ -261,9 +290,9 @@ export function LeadsMap({
             C
           </button>
           <button
-            onClick={() => setFilterGrade("D")}
+            onClick={() => toggleGrade("D")}
             className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-              filterGrade === "D"
+              selectedGrades.has("D")
                 ? "bg-orange-600 text-white"
                 : "bg-white text-orange-600 border border-orange-300 hover:bg-orange-50"
             }`}
@@ -271,9 +300,9 @@ export function LeadsMap({
             D
           </button>
           <button
-            onClick={() => setFilterGrade("F")}
+            onClick={() => toggleGrade("F")}
             className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-              filterGrade === "F"
+              selectedGrades.has("F")
                 ? "bg-red-600 text-white"
                 : "bg-white text-red-600 border border-red-300 hover:bg-red-50"
             }`}
