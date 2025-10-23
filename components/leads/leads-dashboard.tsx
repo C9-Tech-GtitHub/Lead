@@ -101,6 +101,7 @@ export function LeadsDashboard({
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [gradeFilter, setGradeFilter] = useState<string>("all");
   const [runFilter, setRunFilter] = useState<string>("all");
+  const [emailStatusFilter, setEmailStatusFilter] = useState<string>("all");
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -135,6 +136,7 @@ export function LeadsDashboard({
         status: statusFilter,
         grade: gradeFilter,
         run: runFilter,
+        emailStatus: emailStatusFilter,
       });
 
       const response = await fetch(`/api/leads?${params}`);
@@ -172,14 +174,21 @@ export function LeadsDashboard({
   // Fetch leads when filters or page changes
   useEffect(() => {
     fetchLeads();
-  }, [currentPage, pageSize, statusFilter, gradeFilter, runFilter]);
+  }, [
+    currentPage,
+    pageSize,
+    statusFilter,
+    gradeFilter,
+    runFilter,
+    emailStatusFilter,
+  ]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     if (currentPage !== 1) {
       setCurrentPage(1);
     }
-  }, [statusFilter, gradeFilter, runFilter]);
+  }, [statusFilter, gradeFilter, runFilter, emailStatusFilter]);
 
   // Toggle lead selection
   const toggleLeadSelection = (leadId: string) => {
@@ -320,6 +329,9 @@ export function LeadsDashboard({
       }
       if (runFilter !== "all") {
         query = query.eq("run_id", runFilter);
+      }
+      if (emailStatusFilter !== "all") {
+        query = query.eq("email_status", emailStatusFilter);
       }
 
       const { data: exportLeads } = await query;
@@ -467,14 +479,35 @@ export function LeadsDashboard({
               </select>
             </div>
 
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Email Status:
+              </label>
+              <select
+                value={emailStatusFilter}
+                onChange={(e) => setEmailStatusFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium"
+              >
+                <option value="all">All Email Statuses</option>
+                <option value="unknown">Unknown</option>
+                <option value="valid">Valid</option>
+                <option value="suppressed">Suppressed</option>
+                <option value="bounced">Bounced</option>
+                <option value="unsubscribed">Unsubscribed</option>
+                <option value="invalid">Invalid</option>
+              </select>
+            </div>
+
             {(runFilter !== "all" ||
               statusFilter !== "all" ||
-              gradeFilter !== "all") && (
+              gradeFilter !== "all" ||
+              emailStatusFilter !== "all") && (
               <button
                 onClick={() => {
                   setRunFilter("all");
                   setStatusFilter("all");
                   setGradeFilter("all");
+                  setEmailStatusFilter("all");
                 }}
                 className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
               >

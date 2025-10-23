@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   const statusFilter = searchParams.get("status") || "all";
   const gradeFilter = searchParams.get("grade") || "all";
   const runFilter = searchParams.get("run") || "all";
+  const emailStatusFilter = searchParams.get("emailStatus") || "all";
 
   // Calculate range
   const from = (page - 1) * pageSize;
@@ -53,6 +54,10 @@ export async function GET(request: NextRequest) {
 
   if (runFilter !== "all") {
     query = query.eq("run_id", runFilter);
+  }
+
+  if (emailStatusFilter !== "all") {
+    query = query.eq("email_status", emailStatusFilter);
   }
 
   // Apply pagination
