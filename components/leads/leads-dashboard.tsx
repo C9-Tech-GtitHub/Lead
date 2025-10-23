@@ -888,10 +888,18 @@ function EmailStatusBadge({ lead }: { lead: Lead }) {
       suppression.source === "unsubscribe" ||
       suppression.source === "asm_group";
 
+    // Format the group name to be more readable
+    const formatGroupName = (name?: string) => {
+      if (!name) return "Group";
+      // Remove "uncategorised-" prefix and capitalize
+      const cleaned = name.replace(/^uncategorised-/i, "");
+      return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+    };
+
     return (
       <div className="flex flex-col gap-1">
         <span
-          className={`inline-block px-2 py-1 rounded text-xs font-bold ${
+          className={`inline-block px-2 py-1 rounded text-xs font-bold whitespace-nowrap ${
             isUnsubscribe
               ? "bg-orange-100 text-orange-700"
               : "bg-red-100 text-red-700"
@@ -900,8 +908,8 @@ function EmailStatusBadge({ lead }: { lead: Lead }) {
           {isUnsubscribe ? "📭 Unsubscribed" : "🚫 Suppressed"}
         </span>
         <span
-          className="text-xs text-gray-500 dark:text-gray-400"
-          title={suppression.reason}
+          className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[120px]"
+          title={suppression.reason || suppression.source}
         >
           {suppression.source === "manual"
             ? "Manual"
@@ -910,7 +918,7 @@ function EmailStatusBadge({ lead }: { lead: Lead }) {
               : suppression.source === "unsubscribe"
                 ? "Global"
                 : suppression.source === "asm_group"
-                  ? suppression.asm_group_name || "Group"
+                  ? formatGroupName(suppression.asm_group_name)
                   : suppression.source}
         </span>
       </div>
