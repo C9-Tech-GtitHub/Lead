@@ -17,6 +17,14 @@ interface Lead {
   review_count?: number;
   research_status: string;
   compatibility_grade?: string;
+  grade_reasoning?: string;
+  has_multiple_locations: boolean;
+  team_size?: string;
+  ai_report?: string;
+  suggested_hooks?: string[];
+  pain_points?: string[];
+  opportunities?: string[];
+  error_message?: string;
   lead_status: string;
   is_client: boolean;
   created_at: string;
