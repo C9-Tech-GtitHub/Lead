@@ -486,6 +486,17 @@ export async function syncAllSuppressions(): Promise<{
     unsubscribes: await syncUnsubscribes(),
   };
 
+  // After syncing suppressions, update all lead email statuses
+  const supabase = getSupabaseClient();
+  try {
+    await supabase.rpc("exec_sql", {
+      sql: "SELECT update_lead_email_statuses();",
+    });
+    console.log("✅ Lead email statuses updated after sync");
+  } catch (error) {
+    console.error("⚠️ Failed to update lead email statuses:", error);
+  }
+
   return results;
 }
 
