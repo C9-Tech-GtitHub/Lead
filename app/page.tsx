@@ -1,6 +1,7 @@
-import Link from 'next/link';
-import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { DashboardHeader } from "@/components/dashboard/header";
+import { LeadsDashboard } from "@/components/leads/leads-dashboard";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -9,91 +10,84 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // If user is authenticated, redirect to dashboard
-  if (user) {
-    redirect('/dashboard');
+  // If user is not authenticated, redirect to login
+  if (!user) {
+    redirect("/auth/login");
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center">
-          <h1 className="text-5xl font-bold text-gray-900 mb-6">
-            Lead Research Platform
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Discover, research, and grade local businesses automatically using AI.
-            Scale your outreach with intelligent lead analysis.
-          </p>
+  // Get total count only (fast query, no data transfer)
+  const { count: totalCount } = await supabase
+    .from("leads")
+    .select("*", { count: "exact", head: true });
 
-          <div className="flex gap-4 justify-center mb-12">
-            <Link
-              href="/auth/signup"
-              className="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-            >
-              Get Started
-            </Link>
-            <Link
-              href="/auth/login"
-              className="px-8 py-3 bg-white text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors border border-gray-300"
-            >
-              Sign In
-            </Link>
-          </div>
+  // Get all runs
+  const { data: runs } = await supabase
+    .from("runs")
+    .select("id, business_type, location, created_at")
+    .order("created_at", { ascending: false });
 
-          {/* Features */}
-          <div className="grid md:grid-cols-3 gap-8 mt-16 max-w-5xl mx-auto">
-            <FeatureCard
-              title="Automated Scraping"
-              description="Search entire cities for specific business types using Google Maps data"
-              icon="🔍"
-            />
-            <FeatureCard
-              title="AI-Powered Analysis"
-              description="GPT-5 analyzes each business's website, team, and growth potential"
-              icon="🤖"
-            />
-            <FeatureCard
-              title="Smart Grading"
-              description="Get A-F compatibility scores with actionable outreach suggestions"
-              icon="📊"
-            />
-            <FeatureCard
-              title="Real-time Updates"
-              description="Watch your leads being researched and analyzed in real-time"
-              icon="⚡"
-            />
-            <FeatureCard
-              title="Detailed Reports"
-              description="View pain points, opportunities, and suggested hooks for each lead"
-              icon="📝"
-            />
-            <FeatureCard
-              title="Scale Effortlessly"
-              description="Process 5-50 leads per run, with city-wide search capabilities"
-              icon="🚀"
-            />
-          </div>
-        </div>
-      </div>
-    </div>
+  // For each run, get the count of leads using COUNT query (bypasses row limits)
+  const runsWithCounts = await Promise.all(
+    (runs || []).map(async (run) => {
+      const { count } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("run_id", run.id);
+
+      return {
+        ...run,
+        leadCount: count || 0,
+      };
+    }),
   );
-}
 
-function FeatureCard({
-  title,
-  description,
-  icon,
-}: {
-  title: string;
-  description: string;
-  icon: string;
-}) {
+  // Get status counts using individual COUNT queries (bypasses row limits)
+  const statusCounts: Record<string, number> = {};
+  const statuses = [
+    "new",
+    "not_eligible",
+    "ready_to_send",
+    "bulk_sent",
+    "manual_followup",
+    "do_not_contact",
+    "converted",
+  ];
+
+  await Promise.all(
+    statuses.map(async (status) => {
+      const { count } = await supabase
+        .from("leads")
+        .select("*", { count: "exact", head: true })
+        .eq("lead_status", status);
+
+      if (count && count > 0) {
+        statusCounts[status] = count;
+      }
+    }),
+  );
+
   return (
-    <div className="bg-white rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
-      <div className="text-4xl mb-4">{icon}</div>
-      <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
-      <p className="text-gray-600 text-sm">{description}</p>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <DashboardHeader />
+
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="px-4 py-6 sm:px-0">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+              Leads Dashboard
+            </h1>
+            <p className="text-gray-600 dark:text-gray-400 mt-2">
+              Manage your leads, update statuses, and export for sales campaigns
+            </p>
+          </div>
+
+          <LeadsDashboard
+            totalCount={totalCount || 0}
+            statusCounts={statusCounts}
+            runs={runsWithCounts || []}
+          />
+        </div>
+      </main>
     </div>
   );
 }

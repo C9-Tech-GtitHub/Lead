@@ -26,6 +26,16 @@ export function DashboardHeader() {
             </h2>
             <nav className="flex space-x-4">
               <Link
+                href="/"
+                className={`px-3 py-2 text-sm rounded-md ${
+                  pathname === "/"
+                    ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 font-medium"
+                    : "text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+              >
+                Leads
+              </Link>
+              <Link
                 href="/dashboard"
                 className={`px-3 py-2 text-sm rounded-md ${
                   pathname === "/dashboard"
@@ -36,16 +46,6 @@ export function DashboardHeader() {
                 Runs
               </Link>
               <Link
-                href="/dashboard/leads"
-                className={`px-3 py-2 text-sm rounded-md ${
-                  pathname === "/dashboard/leads"
-                    ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 font-medium"
-                    : "text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
-                }`}
-              >
-                Leads Dashboard
-              </Link>
-              <Link
                 href="/dashboard/map"
                 className={`px-3 py-2 text-sm rounded-md ${
                   pathname === "/dashboard/map"
@@ -53,7 +53,7 @@ export function DashboardHeader() {
                     : "text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
                 }`}
               >
-                Map View
+                Map
               </Link>
             </nav>
           </div>
