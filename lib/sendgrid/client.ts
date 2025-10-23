@@ -61,11 +61,14 @@ export interface SyncResult {
 class SendGridReadOnlyClient {
   private initialized = false;
 
-  constructor() {
-    this.initialize();
-  }
-
+  /**
+   * Lazy initialization - only initializes when first API call is made
+   */
   private initialize() {
+    if (this.initialized) {
+      return;
+    }
+
     const apiKey = process.env.SENDGRID_API_KEY;
 
     if (!apiKey) {
@@ -94,9 +97,8 @@ class SendGridReadOnlyClient {
     url: string,
     queryParams?: Record<string, string | number>,
   ): Promise<T> {
-    if (!this.initialized) {
-      throw new Error("SendGrid client not initialized");
-    }
+    // Initialize on first use
+    this.initialize();
 
     // SAFETY CHECK: Only allow GET requests
     if (method !== "GET") {
