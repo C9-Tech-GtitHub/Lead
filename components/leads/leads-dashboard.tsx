@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { exportSalesLeads } from "@/lib/export/sales-csv";
+import { exportSalesLeads, exportAllEmails } from "@/lib/export/sales-csv";
 import { LeadDetailModal } from "../runs/lead-detail-modal";
+import BulkEmailFinderModal from "./bulk-email-finder-modal";
 
 interface Lead {
   id: string;
@@ -115,6 +116,7 @@ export function LeadsDashboard({
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [showBulkEmailFinder, setShowBulkEmailFinder] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -214,6 +216,11 @@ export function LeadsDashboard({
   // Select all on current page
   const selectAllOnPage = () => {
     setSelectedLeads(new Set(leads.map((l) => l.id)));
+  };
+
+  // Select all on current page that have a website domain
+  const selectAllWithDomain = () => {
+    setSelectedLeads(new Set(leads.filter((l) => l.website).map((l) => l.id)));
   };
 
   // Clear selection
@@ -387,6 +394,84 @@ export function LeadsDashboard({
     }
   };
 
+  // Export all emails with full details
+  const handleExportAllEmails = async () => {
+    setIsExporting(true);
+
+    try {
+      const supabase = createClient();
+
+      // Build query for ALL filtered leads (not just current page)
+      let query = supabase
+        .from("leads")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10000); // Cap at 10k for export
+
+      if (statusFilter !== "all") {
+        query = query.eq("lead_status", statusFilter);
+      }
+      if (gradeFilter !== "all") {
+        query = query.eq("compatibility_grade", gradeFilter);
+      }
+      if (runFilter !== "all") {
+        query = query.eq("run_id", runFilter);
+      }
+      if (emailStatusFilter !== "all") {
+        query = query.eq("email_status", emailStatusFilter);
+      }
+
+      const { data: exportLeads } = await query;
+
+      if (!exportLeads || exportLeads.length === 0) {
+        alert("No leads to export");
+        return;
+      }
+
+      // Fetch emails for all leads
+      const leadIds = exportLeads.map((l) => l.id);
+      const { data: emails } = await supabase
+        .from("lead_emails")
+        .select("*")
+        .in("lead_id", leadIds)
+        .order("confidence", { ascending: false });
+
+      // Group emails by lead
+      const emailsByLead: Record<string, any[]> = {};
+      emails?.forEach((email) => {
+        if (!emailsByLead[email.lead_id]) {
+          emailsByLead[email.lead_id] = [];
+        }
+        emailsByLead[email.lead_id].push(email);
+      });
+
+      // Add emails to leads
+      const leadsWithEmails = exportLeads.map((lead) => ({
+        ...lead,
+        emails: emailsByLead[lead.id] || [],
+      }));
+
+      // Count total emails
+      const totalEmails = emails?.length || 0;
+
+      // Export to CSV with all email details
+      const statusLabel =
+        statusFilter !== "all"
+          ? STATUS_OPTIONS.find((s) => s.value === statusFilter)?.label
+          : undefined;
+      exportAllEmails(leadsWithEmails, statusLabel);
+
+      alert(
+        `Exported ${totalEmails} emails from ${leadsWithEmails.length} leads to CSV`,
+      );
+    } catch (error) {
+      console.error("Error exporting emails:", error);
+      alert("Failed to export emails. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Statistics Cards */}
@@ -546,6 +631,14 @@ export function LeadsDashboard({
           {/* Action Buttons */}
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setShowBulkEmailFinder(true)}
+              disabled={selectedLeads.size === 0}
+              className="px-4 py-2 bg-purple-600 dark:bg-purple-700 text-white rounded-md text-sm font-medium hover:bg-purple-700 dark:hover:bg-purple-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
+              title="Find emails for selected leads using Hunter.io"
+            >
+              📧 Find Emails ({selectedLeads.size})
+            </button>
+            <button
               onClick={handleSendGridSync}
               disabled={isSyncing}
               className="px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md text-sm font-medium hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
@@ -559,6 +652,14 @@ export function LeadsDashboard({
               className="px-4 py-2 bg-green-600 dark:bg-green-700 text-white rounded-md text-sm font-medium hover:bg-green-700 dark:hover:bg-green-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
             >
               {isExporting ? "Exporting..." : `📊 Export (${totalCount})`}
+            </button>
+            <button
+              onClick={handleExportAllEmails}
+              disabled={totalCount === 0 || isExporting}
+              className="px-4 py-2 bg-teal-600 dark:bg-teal-700 text-white rounded-md text-sm font-medium hover:bg-teal-700 dark:hover:bg-teal-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
+              title="Export all discovered emails with full details (one row per email)"
+            >
+              {isExporting ? "Exporting..." : `📧 Export All Emails`}
             </button>
           </div>
         </div>
@@ -599,12 +700,18 @@ export function LeadsDashboard({
 
         {/* Select All on Page */}
         {leads.length > 0 && (
-          <div className="mt-2">
+          <div className="mt-2 flex items-center gap-4">
             <button
               onClick={selectAllOnPage}
               className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
             >
               Select all {leads.length} on this page
+            </button>
+            <button
+              onClick={selectAllWithDomain}
+              className="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline"
+            >
+              Select all with website ({leads.filter((l) => l.website).length})
             </button>
           </div>
         )}
@@ -827,6 +934,18 @@ export function LeadsDashboard({
         <LeadDetailModal
           lead={selectedLead}
           onClose={() => setSelectedLead(null)}
+        />
+      )}
+
+      {/* Bulk Email Finder Modal */}
+      {showBulkEmailFinder && (
+        <BulkEmailFinderModal
+          leadIds={Array.from(selectedLeads)}
+          onClose={() => setShowBulkEmailFinder(false)}
+          onComplete={() => {
+            fetchLeads(); // Refresh the leads list to show updated email counts
+            setEmailCounts({}); // Clear and refresh email counts
+          }}
         />
       )}
     </div>
