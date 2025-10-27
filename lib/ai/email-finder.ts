@@ -92,9 +92,9 @@ Respond in this exact JSON format:
 
 If no emails found, return empty emails array with summary of why.`;
 
-    // Call GPT-5 with web search enabled
+    // Call GPT-5 mini with web search enabled (cheaper: $0.25/$2 per 1M tokens)
     const response = await openai.responses.create({
-      model: "gpt-5",
+      model: "gpt-5-mini",
       reasoning: { effort: "medium" },
       max_output_tokens: 2000,
       tools: [
@@ -120,7 +120,20 @@ You prioritize decision-makers and key contacts over generic emails.`,
     });
 
     console.log(`[AI Email Finder] Response received, parsing output...`);
+    console.log(`[AI Email Finder] Response type:`, typeof response);
     console.log(`[AI Email Finder] Response keys:`, Object.keys(response));
+    console.log(`[AI Email Finder] output_text value:`, response.output_text);
+    console.log(
+      `[AI Email Finder] output_text type:`,
+      typeof response.output_text,
+    );
+
+    // Log the full response structure (truncated for safety)
+    const responseStr = JSON.stringify(response, null, 2);
+    console.log(
+      `[AI Email Finder] Full response (first 1000 chars):`,
+      responseStr.substring(0, 1000),
+    );
 
     // Try different possible response formats
     let content =
@@ -135,8 +148,8 @@ You prioritize decision-makers and key contacts over generic emails.`,
 
     if (!content) {
       console.error(
-        "[AI Email Finder] No content found in response:",
-        JSON.stringify(response, null, 2),
+        "[AI Email Finder] No content found in response - full object:",
+        responseStr,
       );
       throw new Error("No response from GPT-5");
     }
