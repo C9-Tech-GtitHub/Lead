@@ -1,40 +1,47 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
-    const { data: { user } } = await supabase.auth.getUser()
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { leadIds, onlyMissing = true } = await request.json()
+    const { leadIds, onlyMissing = true } = await request.json();
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
-      return NextResponse.json({ error: 'Lead IDs are required' }, { status: 400 })
+      return NextResponse.json(
+        { error: "Lead IDs are required" },
+        { status: 400 },
+      );
     }
 
-    const tombaApiKey = process.env.TOMBA_API_KEY
+    const tombaApiKey = process.env.TOMBA_API_KEY;
     if (!tombaApiKey) {
-      return NextResponse.json({ error: 'Tomba.io API key not configured' }, { status: 500 })
+      return NextResponse.json(
+        { error: "Tomba.io API key not configured" },
+        { status: 500 },
+      );
     }
 
     // Fetch leads with their domains
     const { data: leads, error: leadsError } = await supabase
-      .from('leads')
-      .select('id, name, website, tomba_searched_at')
-      .in('id', leadIds)
-      .eq('user_id', user.id)
+      .from("leads")
+      .select("id, name, website, tomba_searched_at")
+      .in("id", leadIds)
+      .eq("user_id", user.id);
 
     if (leadsError) {
-      return NextResponse.json({ error: leadsError.message }, { status: 500 })
+      return NextResponse.json({ error: leadsError.message }, { status: 500 });
     }
 
     if (!leads || leads.length === 0) {
-      return NextResponse.json({ error: 'No leads found' }, { status: 404 })
+      return NextResponse.json({ error: "No leads found" }, { status: 404 });
     }
 
     const results = {
@@ -43,91 +50,94 @@ export async function POST(request: Request) {
       skipped: 0,
       successful: 0,
       failed: 0,
-      details: [] as any[]
-    }
+      details: [] as any[],
+    };
 
     // Process each lead
     for (const lead of leads) {
-      let domain = lead.website
+      let domain = lead.website;
 
       // Skip if no domain
       if (!domain) {
-        results.skipped++
+        results.skipped++;
         results.details.push({
           leadId: lead.id,
           leadName: lead.name,
-          status: 'skipped',
-          reason: 'No website domain'
-        })
-        continue
+          status: "skipped",
+          reason: "No website domain",
+        });
+        continue;
       }
 
       // Skip if already searched and onlyMissing is true
       if (onlyMissing && lead.tomba_searched_at) {
-        results.skipped++
+        results.skipped++;
         results.details.push({
           leadId: lead.id,
           leadName: lead.name,
-          status: 'skipped',
-          reason: 'Already searched'
-        })
-        continue
+          status: "skipped",
+          reason: "Already searched",
+        });
+        continue;
       }
 
       // Clean domain
-      domain = domain.replace(/^(https?:\/\/)?(www\.)?/, '').split('/')[0]
+      domain = domain.replace(/^(https?:\/\/)?(www\.)?/, "").split("/")[0];
 
       try {
         // Call Tomba.io API
         const tombaResponse = await fetch(
           `https://api.tomba.io/v1/domain-search?domain=${encodeURIComponent(domain)}`,
           {
-            method: 'GET',
+            method: "GET",
             headers: {
-              'X-Tomba-Key': tombaApiKey,
-              'Content-Type': 'application/json',
+              "X-Tomba-Key": tombaApiKey,
+              "Content-Type": "application/json",
             },
-          }
-        )
+          },
+        );
 
         if (!tombaResponse.ok) {
-          const errorData = await tombaResponse.json().catch(() => ({}))
+          const errorData = await tombaResponse.json().catch(() => ({}));
 
           // Handle rate limit
           if (tombaResponse.status === 429) {
-            results.failed++
+            results.failed++;
             results.details.push({
               leadId: lead.id,
               leadName: lead.name,
-              status: 'failed',
-              reason: 'Rate limit reached'
-            })
-            continue
+              status: "failed",
+              reason: "Rate limit reached",
+            });
+            continue;
           }
 
-          throw new Error(errorData.error?.message || `Tomba.io API error: ${tombaResponse.status}`)
+          throw new Error(
+            errorData.error?.message ||
+              `Tomba.io API error: ${tombaResponse.status}`,
+          );
         }
 
-        const tombaData = await tombaResponse.json()
-        const { data: domainData } = tombaData
+        const tombaData = await tombaResponse.json();
+        const { data: domainData } = tombaData;
 
         // Update lead with Tomba.io metadata
         await supabase
-          .from('leads')
+          .from("leads")
           .update({
             tomba_searched_at: new Date().toISOString(),
             tomba_organization: domainData.organization || null,
             tomba_email_pattern: domainData.pattern || null,
             tomba_total_emails: domainData.emails?.length || 0,
           })
-          .eq('id', lead.id)
+          .eq("id", lead.id);
 
         // Delete existing Tomba emails for this lead
         await supabase
-          .from('lead_emails')
+          .from("lead_emails")
           .delete()
-          .eq('lead_id', lead.id)
-          .eq('provider', 'tomba')
+          .eq("lead_id", lead.id)
+          .eq("provider", "tomba");
 
         // Insert new emails if any found
         if (domainData.emails && domainData.emails.length > 0) {
@@ -135,74 +145,72 @@ export async function POST(request: Request) {
             lead_id: lead.id,
             user_id: user.id,
             email: email.email,
-            type: email.type === 'generic' ? 'generic' : 'personal',
+            type: email.type === "generic" ? "generic" : "personal",
             confidence: email.score || 0,
             first_name: email.first_name,
             last_name: email.last_name,
             position: email.position,
             department: email.department,
             seniority: email.seniority,
-            verification_status: email.verification?.status || 'unknown',
+            verification_status: email.verification?.status || "unknown",
             verification_date: email.verification?.date || null,
             sources: email.sources || [],
-            provider: 'tomba',
-          }))
+            provider: "tomba",
+          }));
 
           const { error: insertError } = await supabase
-            .from('lead_emails')
-            .insert(emailRecords)
+            .from("lead_emails")
+            .insert(emailRecords);
 
           if (insertError) {
-            console.error('Error inserting emails:', insertError)
-            results.failed++
+            console.error("Error inserting emails:", insertError);
+            results.failed++;
             results.details.push({
               leadId: lead.id,
               leadName: lead.name,
-              status: 'failed',
-              reason: 'Failed to save emails to database',
-              emailsFound: domainData.emails.length
-            })
-            continue
+              status: "failed",
+              reason: "Failed to save emails to database",
+              emailsFound: domainData.emails.length,
+            });
+            continue;
           }
         }
 
-        results.successful++
-        results.processed++
+        results.successful++;
+        results.processed++;
         results.details.push({
           leadId: lead.id,
           leadName: lead.name,
           domain: domain,
-          status: 'success',
+          status: "success",
           emailsFound: domainData.emails?.length || 0,
           organization: domainData.organization,
-          pattern: domainData.pattern
-        })
+          pattern: domainData.pattern,
+        });
 
         // Add delay between requests to avoid rate limiting (1 second)
-        await new Promise(resolve => setTimeout(resolve, 1000))
-
+        await new Promise((resolve) => setTimeout(resolve, 1000));
       } catch (error: any) {
-        results.failed++
-        results.processed++
+        results.failed++;
+        results.processed++;
         results.details.push({
           leadId: lead.id,
           leadName: lead.name,
-          status: 'failed',
-          reason: error.message
-        })
+          status: "failed",
+          reason: error.message,
+        });
       }
     }
 
     return NextResponse.json({
       success: true,
-      results
-    })
-
+      results,
+    });
   } catch (error: any) {
-    console.error('Bulk email search error:', error)
+    console.error("Bulk email search error:", error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 }
-    )
+      { error: error.message || "Internal server error" },
+      { status: 500 },
+    );
   }
 }
