@@ -237,6 +237,8 @@ export const processLeadRun = inngest.createFunction(
         latitude: business.latitude,
         longitude: business.longitude,
         research_status: "pending",
+        industry: businessTypeDisplay, // Add industry from run
+        city: location, // Add location from run
       }));
 
       const { data, error } = await supabase
