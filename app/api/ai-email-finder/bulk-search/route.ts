@@ -3,21 +3,25 @@ import { createClient } from "@/lib/supabase/server";
 import { findEmailsWithAI } from "@/lib/ai/email-finder";
 
 export async function POST(request: Request) {
-  console.log('[AI Email Finder Bulk] Route hit - starting AI bulk email search');
+  console.log(
+    "[AI Email Finder Bulk] Route hit - starting AI bulk email search",
+  );
   try {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    console.log('[AI Email Finder Bulk] User authenticated:', user?.id);
+    console.log("[AI Email Finder Bulk] User authenticated:", user?.id);
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const { leadIds, onlyMissing = true } = await request.json();
+    console.log("[AI Email Finder Bulk] Received leadIds:", leadIds);
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+      console.log("[AI Email Finder Bulk] Invalid leadIds");
       return NextResponse.json(
         { error: "Lead IDs are required" },
         { status: 400 },
@@ -28,11 +32,12 @@ export async function POST(request: Request) {
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "OpenAI API key not configured" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     // Fetch leads with their domains
+    console.log("[AI Email Finder Bulk] Querying leads for user:", user.id);
     const { data: leads, error: leadsError } = await supabase
       .from("leads")
       .select("id, name, website, hunter_io_searched_at, tomba_searched_at")
@@ -40,10 +45,14 @@ export async function POST(request: Request) {
       .eq("user_id", user.id);
 
     if (leadsError) {
+      console.error("[AI Email Finder Bulk] Database error:", leadsError);
       return NextResponse.json({ error: leadsError.message }, { status: 500 });
     }
 
+    console.log("[AI Email Finder Bulk] Found leads:", leads?.length || 0);
+
     if (!leads || leads.length === 0) {
+      console.log("[AI Email Finder Bulk] No leads found - returning 404");
       return NextResponse.json({ error: "No leads found" }, { status: 404 });
     }
 
@@ -73,7 +82,10 @@ export async function POST(request: Request) {
       }
 
       // Skip if already searched and onlyMissing is true
-      if (onlyMissing && (lead.hunter_io_searched_at || lead.tomba_searched_at)) {
+      if (
+        onlyMissing &&
+        (lead.hunter_io_searched_at || lead.tomba_searched_at)
+      ) {
         results.skipped++;
         results.details.push({
           leadId: lead.id,
@@ -114,7 +126,9 @@ export async function POST(request: Request) {
             lead_id: lead.id,
             user_id: user.id,
             email: email.email,
-            type: email.email.match(/^(info|contact|hello|support|sales)@/) ? 'generic' : 'personal',
+            type: email.email.match(/^(info|contact|hello|support|sales)@/)
+              ? "generic"
+              : "personal",
             confidence: email.confidence,
             first_name: email.firstName || null,
             last_name: email.lastName || null,
@@ -180,7 +194,7 @@ export async function POST(request: Request) {
     console.error("AI bulk email search error:", error);
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
