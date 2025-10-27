@@ -140,22 +140,46 @@ export async function POST(request: Request) {
             provider: "ai",
           }));
 
+          console.log(
+            `[AI Email Finder] Inserting ${emailRecords.length} emails for lead ${lead.id}`,
+          );
+          console.log(
+            "[AI Email Finder] Email records:",
+            JSON.stringify(emailRecords, null, 2),
+          );
+
           const { error: insertError } = await supabase
             .from("lead_emails")
             .insert(emailRecords);
 
           if (insertError) {
-            console.error("Error inserting emails:", insertError);
+            console.error(
+              "[AI Email Finder] Error inserting emails:",
+              insertError,
+            );
+            console.error("[AI Email Finder] Error code:", insertError.code);
+            console.error(
+              "[AI Email Finder] Error message:",
+              insertError.message,
+            );
+            console.error(
+              "[AI Email Finder] Error details:",
+              insertError.details,
+            );
             results.failed++;
             results.details.push({
               leadId: lead.id,
               leadName: lead.name,
               status: "failed",
-              reason: "Failed to save emails to database",
+              reason: `Database error: ${insertError.message}`,
               emailsFound: aiResult.emails.length,
             });
             continue;
           }
+
+          console.log(
+            `[AI Email Finder] Successfully inserted ${emailRecords.length} emails`,
+          );
         }
 
         results.successful++;
