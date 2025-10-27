@@ -116,6 +116,9 @@ export async function POST(request: Request) {
             hunter_organization: aiResult.organization || null,
             hunter_email_pattern: aiResult.emailPattern || null,
             hunter_total_emails: aiResult.emails.length,
+            ai_email_searched_at: new Date().toISOString(),
+            ai_email_search_summary:
+              aiResult.emails.length === 0 ? aiResult.searchSummary : null,
           })
           .eq("id", lead.id);
 

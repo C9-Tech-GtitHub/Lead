@@ -43,6 +43,9 @@ interface Lead {
     last_contacted_at: string;
     can_contact_after: string;
   } | null;
+  // AI email search tracking
+  ai_email_searched_at?: string;
+  ai_email_search_summary?: string;
   run?: {
     id: string;
     business_type: string;
@@ -116,6 +119,7 @@ export function LeadsDashboard({
   const [emailTypeFilter, setEmailTypeFilter] = useState<string>("all");
   const [emailEligibilityFilter, setEmailEligibilityFilter] =
     useState<string>("all");
+  const [aiSearchedNoEmails, setAiSearchedNoEmails] = useState<string>("all");
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -156,6 +160,7 @@ export function LeadsDashboard({
         search: searchQuery,
         emailType: emailTypeFilter,
         emailEligibility: emailEligibilityFilter,
+        aiSearchedNoEmails: aiSearchedNoEmails,
       });
 
       const response = await fetch(`/api/leads?${params}`);
@@ -204,6 +209,7 @@ export function LeadsDashboard({
     searchQuery,
     emailTypeFilter,
     emailEligibilityFilter,
+    aiSearchedNoEmails,
   ]);
 
   // Reset to page 1 when filters change
@@ -220,6 +226,7 @@ export function LeadsDashboard({
     searchQuery,
     emailTypeFilter,
     emailEligibilityFilter,
+    aiSearchedNoEmails,
   ]);
 
   // Toggle lead selection
@@ -605,6 +612,16 @@ export function LeadsDashboard({
           </button>
           <button
             onClick={() => {
+              // Show leads that were searched by AI but no emails were found
+              setAiSearchedNoEmails("true");
+            }}
+            className="px-3 py-1 bg-amber-600 dark:bg-amber-700 text-white rounded text-xs font-medium hover:bg-amber-700 dark:hover:bg-amber-600"
+            title="Show leads where AI searched but found no email addresses"
+          >
+            🔍 Searched - No Emails
+          </button>
+          <button
+            onClick={() => {
               setStatusFilter("all");
               setGradeFilter("all");
               setGradeRangeFilter("all");
@@ -613,6 +630,7 @@ export function LeadsDashboard({
               setSearchQuery("");
               setEmailTypeFilter("all");
               setEmailEligibilityFilter("all");
+              setAiSearchedNoEmails("all");
             }}
             className="px-3 py-1 bg-gray-600 dark:bg-gray-700 text-white rounded text-xs font-medium hover:bg-gray-700 dark:hover:bg-gray-600"
           >
@@ -735,7 +753,8 @@ export function LeadsDashboard({
               gradeRangeFilter !== "all" ||
               emailStatusFilter !== "all" ||
               emailTypeFilter !== "all" ||
-              emailEligibilityFilter !== "all") && (
+              emailEligibilityFilter !== "all" ||
+              aiSearchedNoEmails !== "all") && (
               <button
                 onClick={() => {
                   setRunFilter("all");
@@ -745,6 +764,7 @@ export function LeadsDashboard({
                   setEmailStatusFilter("all");
                   setEmailTypeFilter("all");
                   setEmailEligibilityFilter("all");
+                  setAiSearchedNoEmails("all");
                 }}
                 className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
               >
@@ -1276,6 +1296,23 @@ function EmailStatusBadge({ lead }: { lead: Lead }) {
         </span>
         <span className="text-xs text-gray-500 dark:text-gray-400">
           {lastContacted}
+        </span>
+      </div>
+    );
+  }
+
+  // Check if AI searched but found no emails
+  if (lead.ai_email_searched_at && lead.ai_email_search_summary) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span
+          className="inline-block px-2 py-1 rounded text-xs font-bold bg-amber-100 text-amber-700 cursor-help"
+          title={lead.ai_email_search_summary}
+        >
+          🔍 Searched - No Emails
+        </span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {new Date(lead.ai_email_searched_at).toLocaleDateString()}
         </span>
       </div>
     );

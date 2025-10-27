@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   const searchQuery = searchParams.get("search") || "";
   const emailTypeFilter = searchParams.get("emailType") || "all"; // personal, generic, all
   const emailEligibilityFilter = searchParams.get("emailEligibility") || "all"; // eligible, not_eligible, all
+  const aiSearchedNoEmails = searchParams.get("aiSearchedNoEmails") || "all"; // true, false, all
 
   // Calculate range
   const from = (page - 1) * pageSize;
@@ -75,6 +76,17 @@ export async function GET(request: NextRequest) {
   if (searchQuery) {
     query = query.or(
       `name.ilike.%${searchQuery}%,website.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%,industry.ilike.%${searchQuery}%`,
+    );
+  }
+
+  // Filter for AI searched but no emails found
+  if (aiSearchedNoEmails === "true") {
+    query = query
+      .not("ai_email_searched_at", "is", null)
+      .not("ai_email_search_summary", "is", null);
+  } else if (aiSearchedNoEmails === "false") {
+    query = query.or(
+      "ai_email_searched_at.is.null,ai_email_search_summary.is.null",
     );
   }
 
