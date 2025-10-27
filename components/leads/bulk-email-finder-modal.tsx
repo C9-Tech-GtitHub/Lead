@@ -173,7 +173,7 @@ export default function BulkEmailFinderModal({
                   <li>
                     • Searches{" "}
                     {provider === "hunter" ? "Hunter.io" : "Tomba.io"} for
-                    emails at each lead's domain
+                    emails at each lead&apos;s domain
                   </li>
                   <li>• Processes one lead per second to avoid rate limits</li>
                   <li>• Saves all discovered emails to your database</li>
@@ -190,7 +190,7 @@ export default function BulkEmailFinderModal({
                   className="w-4 h-4 text-blue-600 rounded border-gray-300"
                 />
                 <label htmlFor="onlyMissing" className="text-sm text-gray-700">
-                  Only search leads that haven't been searched before
+                  Only search leads that haven&apos;t been searched before
                 </label>
               </div>
 
