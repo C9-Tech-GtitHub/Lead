@@ -425,7 +425,9 @@ export default function BulkEmailFinderModal({
           ) : (
             <>
               <div className="text-sm text-gray-600">
-                Search completed • {results.successful} successful
+                {results.successful === 0 && results.failed === 0
+                  ? `All ${results.skipped} lead${results.skipped !== 1 ? "s" : ""} already searched`
+                  : `Search completed • ${results.successful} successful, ${results.failed} failed, ${results.skipped} skipped`}
               </div>
               <button
                 onClick={onClose}
