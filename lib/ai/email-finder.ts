@@ -99,7 +99,7 @@ If no emails found, return empty emails array with summary of why.`;
       max_output_tokens: 2000,
       tools: [
         {
-          type: "web_search",
+          type: "web_search_preview",
         },
       ],
       tool_choice: "auto", // Let it decide when to use web search
