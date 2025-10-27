@@ -120,11 +120,24 @@ You prioritize decision-makers and key contacts over generic emails.`,
     });
 
     console.log(`[AI Email Finder] Response received, parsing output...`);
+    console.log(`[AI Email Finder] Response keys:`, Object.keys(response));
 
-    const content = response.output_text;
+    // Try different possible response formats
+    let content =
+      response.output_text ||
+      (response.output && Array.isArray(response.output)
+        ? response.output
+            .filter((item: any) => item.type === "text")
+            .map((item: any) => item.text)
+            .join("\n")
+        : "") ||
+      (typeof response.output === "string" ? response.output : "");
 
     if (!content) {
-      console.error("[AI Email Finder] No output_text in response");
+      console.error(
+        "[AI Email Finder] No content found in response:",
+        JSON.stringify(response, null, 2),
+      );
       throw new Error("No response from GPT-5");
     }
 
