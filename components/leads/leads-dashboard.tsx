@@ -109,8 +109,13 @@ export function LeadsDashboard({
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [gradeFilter, setGradeFilter] = useState<string>("all");
+  const [gradeRangeFilter, setGradeRangeFilter] = useState<string>("all");
   const [runFilter, setRunFilter] = useState<string>("all");
   const [emailStatusFilter, setEmailStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [emailTypeFilter, setEmailTypeFilter] = useState<string>("all");
+  const [emailEligibilityFilter, setEmailEligibilityFilter] =
+    useState<string>("all");
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -145,8 +150,12 @@ export function LeadsDashboard({
         pageSize: pageSize.toString(),
         status: statusFilter,
         grade: gradeFilter,
+        gradeRange: gradeRangeFilter,
         run: runFilter,
         emailStatus: emailStatusFilter,
+        search: searchQuery,
+        emailType: emailTypeFilter,
+        emailEligibility: emailEligibilityFilter,
       });
 
       const response = await fetch(`/api/leads?${params}`);
@@ -189,8 +198,12 @@ export function LeadsDashboard({
     pageSize,
     statusFilter,
     gradeFilter,
+    gradeRangeFilter,
     runFilter,
     emailStatusFilter,
+    searchQuery,
+    emailTypeFilter,
+    emailEligibilityFilter,
   ]);
 
   // Reset to page 1 when filters change
@@ -198,7 +211,16 @@ export function LeadsDashboard({
     if (currentPage !== 1) {
       setCurrentPage(1);
     }
-  }, [statusFilter, gradeFilter, runFilter, emailStatusFilter]);
+  }, [
+    statusFilter,
+    gradeFilter,
+    gradeRangeFilter,
+    runFilter,
+    emailStatusFilter,
+    searchQuery,
+    emailTypeFilter,
+    emailEligibilityFilter,
+  ]);
 
   // Toggle lead selection
   const toggleLeadSelection = (leadId: string) => {
@@ -513,6 +535,92 @@ export function LeadsDashboard({
         />
       </div>
 
+      {/* Search Bar */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Search by company name, website, city, or industry..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
+            />
+          </div>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Preset Filters */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100 mr-2">
+            Quick Filters:
+          </span>
+          <button
+            onClick={() => {
+              setStatusFilter("all");
+              setGradeFilter("all");
+              setEmailStatusFilter("valid");
+              setEmailTypeFilter("personal");
+              setEmailEligibilityFilter("eligible");
+              setRunFilter("all");
+            }}
+            className="px-3 py-1 bg-green-600 dark:bg-green-700 text-white rounded text-xs font-medium hover:bg-green-700 dark:hover:bg-green-600"
+          >
+            ✓ All Valid Leads
+          </button>
+          <button
+            onClick={() => {
+              setEmailEligibilityFilter("eligible");
+              setStatusFilter("new");
+            }}
+            className="px-3 py-1 bg-blue-600 dark:bg-blue-700 text-white rounded text-xs font-medium hover:bg-blue-700 dark:hover:bg-blue-600"
+          >
+            📧 Never Sent
+          </button>
+          <button
+            onClick={() => {
+              setEmailTypeFilter("personal");
+            }}
+            className="px-3 py-1 bg-purple-600 dark:bg-purple-700 text-white rounded text-xs font-medium hover:bg-purple-700 dark:hover:bg-purple-600"
+          >
+            👤 Non-Generic Emails
+          </button>
+          <button
+            onClick={() => {
+              setGradeFilter("all");
+              setGradeRangeFilter("A-B");
+            }}
+            className="px-3 py-1 bg-yellow-600 dark:bg-yellow-700 text-white rounded text-xs font-medium hover:bg-yellow-700 dark:hover:bg-yellow-600"
+          >
+            ⭐ Grade A or B
+          </button>
+          <button
+            onClick={() => {
+              setStatusFilter("all");
+              setGradeFilter("all");
+              setGradeRangeFilter("all");
+              setRunFilter("all");
+              setEmailStatusFilter("all");
+              setSearchQuery("");
+              setEmailTypeFilter("all");
+              setEmailEligibilityFilter("all");
+            }}
+            className="px-3 py-1 bg-gray-600 dark:bg-gray-700 text-white rounded text-xs font-medium hover:bg-gray-700 dark:hover:bg-gray-600"
+          >
+            Clear All Filters
+          </button>
+        </div>
+      </div>
+
       {/* Filters and Actions */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
         <div className="flex flex-wrap gap-4 items-start justify-between">
@@ -591,16 +699,52 @@ export function LeadsDashboard({
               </select>
             </div>
 
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Email Type:
+              </label>
+              <select
+                value={emailTypeFilter}
+                onChange={(e) => setEmailTypeFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium"
+              >
+                <option value="all">All Types</option>
+                <option value="personal">Personal Only</option>
+                <option value="generic">Generic Only</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Eligibility:
+              </label>
+              <select
+                value={emailEligibilityFilter}
+                onChange={(e) => setEmailEligibilityFilter(e.target.value)}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium"
+              >
+                <option value="all">All Leads</option>
+                <option value="eligible">Eligible to Send</option>
+                <option value="not_eligible">Not Eligible</option>
+              </select>
+            </div>
+
             {(runFilter !== "all" ||
               statusFilter !== "all" ||
               gradeFilter !== "all" ||
-              emailStatusFilter !== "all") && (
+              gradeRangeFilter !== "all" ||
+              emailStatusFilter !== "all" ||
+              emailTypeFilter !== "all" ||
+              emailEligibilityFilter !== "all") && (
               <button
                 onClick={() => {
                   setRunFilter("all");
                   setStatusFilter("all");
                   setGradeFilter("all");
+                  setGradeRangeFilter("all");
                   setEmailStatusFilter("all");
+                  setEmailTypeFilter("all");
+                  setEmailEligibilityFilter("all");
                 }}
                 className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
               >

@@ -19,8 +19,12 @@ export async function GET(request: NextRequest) {
   const pageSize = parseInt(searchParams.get("pageSize") || "50");
   const statusFilter = searchParams.get("status") || "all";
   const gradeFilter = searchParams.get("grade") || "all";
+  const gradeRangeFilter = searchParams.get("gradeRange") || "all"; // For Grade A-B filtering
   const runFilter = searchParams.get("run") || "all";
   const emailStatusFilter = searchParams.get("emailStatus") || "all";
+  const searchQuery = searchParams.get("search") || "";
+  const emailTypeFilter = searchParams.get("emailType") || "all"; // personal, generic, all
+  const emailEligibilityFilter = searchParams.get("emailEligibility") || "all"; // eligible, not_eligible, all
 
   // Calculate range
   const from = (page - 1) * pageSize;
@@ -52,12 +56,26 @@ export async function GET(request: NextRequest) {
     query = query.eq("compatibility_grade", gradeFilter);
   }
 
+  // Handle grade range filter (e.g., A-B)
+  if (gradeRangeFilter !== "all") {
+    if (gradeRangeFilter === "A-B") {
+      query = query.in("compatibility_grade", ["A", "B"]);
+    }
+  }
+
   if (runFilter !== "all") {
     query = query.eq("run_id", runFilter);
   }
 
   if (emailStatusFilter !== "all") {
     query = query.eq("email_status", emailStatusFilter);
+  }
+
+  // Apply search query (search company name, website, city, industry)
+  if (searchQuery) {
+    query = query.or(
+      `name.ilike.%${searchQuery}%,website.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%,industry.ilike.%${searchQuery}%`,
+    );
   }
 
   // Apply pagination
@@ -69,8 +87,92 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Apply post-fetch filters that require email data
+  let filteredLeads = leads || [];
+
+  // Filter by email type (personal vs generic)
+  if (emailTypeFilter !== "all" && filteredLeads.length > 0) {
+    const leadIds = filteredLeads.map((l) => l.id);
+    const { data: emailTypeData } = await supabase
+      .from("lead_emails")
+      .select("lead_id, type")
+      .in("lead_id", leadIds);
+
+    const leadsWithEmailType = new Set(
+      emailTypeData
+        ?.filter((e) => e.type === emailTypeFilter)
+        .map((e) => e.lead_id) || [],
+    );
+
+    filteredLeads = filteredLeads.filter((l) => leadsWithEmailType.has(l.id));
+  }
+
+  // Filter by email eligibility
+  if (emailEligibilityFilter !== "all" && filteredLeads.length > 0) {
+    const leadIds = filteredLeads.map((l) => l.id);
+
+    // Get email counts
+    const { data: emailData } = await supabase
+      .from("lead_emails")
+      .select("lead_id")
+      .in("lead_id", leadIds);
+
+    const leadsWithEmails = new Set(emailData?.map((e) => e.lead_id) || []);
+
+    // Get suppression status
+    const domainSet = new Set(
+      filteredLeads.map((l) => l.email_domain).filter(Boolean) || [],
+    );
+    const domains = Array.from(domainSet);
+    const { data: suppressionData } = await supabase
+      .from("email_suppression")
+      .select("domain")
+      .in("domain", domains);
+
+    const suppressedDomains = new Set(
+      suppressionData?.map((s) => s.domain) || [],
+    );
+
+    // Get contact tracking
+    const { data: contactData } = await supabase
+      .from("domain_contact_tracking")
+      .select("domain, can_contact_after")
+      .in("domain", domains);
+
+    const onHoldDomains = new Set(
+      contactData
+        ?.filter((c) => new Date(c.can_contact_after) > new Date())
+        .map((c) => c.domain) || [],
+    );
+
+    // Determine eligibility for each lead
+    const eligibleLeads = new Set<string>();
+    filteredLeads.forEach((lead) => {
+      const hasEmail = leadsWithEmails.has(lead.id);
+      const isSuppressed = lead.email_domain
+        ? suppressedDomains.has(lead.email_domain)
+        : false;
+      const isOnHold = lead.email_domain
+        ? onHoldDomains.has(lead.email_domain)
+        : false;
+      const hasBeenSent = lead.last_email_sent_at !== null;
+
+      const isEligible = hasEmail && !isSuppressed && !isOnHold && !hasBeenSent;
+
+      if (isEligible) {
+        eligibleLeads.add(lead.id);
+      }
+    });
+
+    if (emailEligibilityFilter === "eligible") {
+      filteredLeads = filteredLeads.filter((l) => eligibleLeads.has(l.id));
+    } else if (emailEligibilityFilter === "not_eligible") {
+      filteredLeads = filteredLeads.filter((l) => !eligibleLeads.has(l.id));
+    }
+  }
+
   // Get email counts for these leads
-  const leadIds = leads?.map((l) => l.id) || [];
+  const leadIds = filteredLeads?.map((l) => l.id) || [];
   const { data: emailData } = await supabase
     .from("lead_emails")
     .select("lead_id")
@@ -83,7 +185,7 @@ export async function GET(request: NextRequest) {
 
   // Get email suppression status for domains
   const domainSet = new Set(
-    leads?.map((l) => l.email_domain).filter(Boolean) || [],
+    filteredLeads?.map((l) => l.email_domain).filter(Boolean) || [],
   );
   const domains = Array.from(domainSet);
   const { data: suppressionData } = await supabase
@@ -111,7 +213,7 @@ export async function GET(request: NextRequest) {
   });
 
   // Enrich leads with suppression and contact info
-  const enrichedLeads = leads?.map((lead) => ({
+  const enrichedLeads = filteredLeads?.map((lead) => ({
     ...lead,
     suppression: lead.email_domain
       ? suppressionByDomain[lead.email_domain]
@@ -127,8 +229,8 @@ export async function GET(request: NextRequest) {
     pagination: {
       page,
       pageSize,
-      total: count || 0,
-      totalPages: Math.ceil((count || 0) / pageSize),
+      total: filteredLeads.length,
+      totalPages: Math.ceil(filteredLeads.length / pageSize),
     },
   });
 }
