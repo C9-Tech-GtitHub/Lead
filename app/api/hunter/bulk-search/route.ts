@@ -73,20 +73,22 @@ export async function POST(request: Request) {
       }
 
       // Skip if already searched and onlyMissing is true
-      if (
-        onlyMissing &&
-        (lead.hunter_io_searched_at ||
-          lead.tomba_searched_at ||
-          lead.ai_email_searched_at)
-      ) {
-        results.skipped++;
-        results.details.push({
-          leadId: lead.id,
-          leadName: lead.name,
-          status: "skipped",
-          reason: "Already searched with Hunter/Tomba/AI",
-        });
-        continue;
+      if (onlyMissing) {
+        const searchedWith = [];
+        if (lead.hunter_io_searched_at) searchedWith.push("Hunter.io");
+        if (lead.tomba_searched_at) searchedWith.push("Tomba.io");
+        if (lead.ai_email_searched_at) searchedWith.push("AI Search");
+
+        if (searchedWith.length > 0) {
+          results.skipped++;
+          results.details.push({
+            leadId: lead.id,
+            leadName: lead.name,
+            status: "skipped",
+            reason: `Already searched with ${searchedWith.join(", ")}`,
+          });
+          continue;
+        }
       }
 
       // Clean domain
