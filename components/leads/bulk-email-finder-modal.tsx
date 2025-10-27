@@ -27,7 +27,7 @@ interface ProcessingResult {
   pattern?: string;
 }
 
-type EmailProvider = "hunter" | "tomba";
+type EmailProvider = "hunter" | "tomba" | "ai";
 
 export default function BulkEmailFinderModal({
   leadIds,
@@ -56,7 +56,9 @@ export default function BulkEmailFinderModal({
       const apiEndpoint =
         provider === "hunter"
           ? "/api/hunter/bulk-search"
-          : "/api/tomba/bulk-search";
+          : provider === "tomba"
+            ? "/api/tomba/bulk-search"
+            : "/api/ai-email-finder/bulk-search";
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
@@ -141,28 +143,41 @@ export default function BulkEmailFinderModal({
               {/* Provider Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Email Provider
+                  Select Email Finder Method
                 </label>
-                <div className="flex gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   <button
                     onClick={() => setProvider("hunter")}
-                    className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${
+                    className={`px-4 py-3 rounded-lg border-2 transition-colors ${
                       provider === "hunter"
                         ? "border-purple-600 bg-purple-50 text-purple-700"
                         : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
                     }`}
                   >
-                    Hunter.io
+                    <div className="font-medium">Hunter.io</div>
+                    <div className="text-xs mt-1 opacity-75">25 free/month</div>
                   </button>
                   <button
                     onClick={() => setProvider("tomba")}
-                    className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${
+                    className={`px-4 py-3 rounded-lg border-2 transition-colors ${
                       provider === "tomba"
                         ? "border-blue-600 bg-blue-50 text-blue-700"
                         : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
                     }`}
                   >
-                    Tomba.io
+                    <div className="font-medium">Tomba.io</div>
+                    <div className="text-xs mt-1 opacity-75">50 free/month</div>
+                  </button>
+                  <button
+                    onClick={() => setProvider("ai")}
+                    className={`px-4 py-3 rounded-lg border-2 transition-colors ${
+                      provider === "ai"
+                        ? "border-green-600 bg-green-50 text-green-700"
+                        : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                    }`}
+                  >
+                    <div className="font-medium">AI Search</div>
+                    <div className="text-xs mt-1 opacity-75">GPT-5 Web</div>
                   </button>
                 </div>
               </div>
@@ -172,12 +187,27 @@ export default function BulkEmailFinderModal({
                 <ul className="text-sm text-blue-800 space-y-1">
                   <li>
                     • Searches{" "}
-                    {provider === "hunter" ? "Hunter.io" : "Tomba.io"} for
-                    emails at each lead&apos;s domain
+                    {provider === "hunter"
+                      ? "Hunter.io"
+                      : provider === "tomba"
+                        ? "Tomba.io"
+                        : "AI with GPT-5 web search"}{" "}
+                    for emails at each lead&apos;s domain
                   </li>
-                  <li>• Processes one lead per second to avoid rate limits</li>
+                  <li>
+                    •{" "}
+                    {provider === "ai"
+                      ? "Processes one lead per 2 seconds"
+                      : "Processes one lead per second to avoid rate limits"}
+                  </li>
                   <li>• Saves all discovered emails to your database</li>
                   <li>• Skips leads without a website domain</li>
+                  {provider === "ai" && (
+                    <li>
+                      • Uses AI to intelligently search the web for verified
+                      contact emails
+                    </li>
+                  )}
                 </ul>
               </div>
 
