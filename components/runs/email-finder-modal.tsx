@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useState, useEffect } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 interface Email {
   value: string;
-  type: 'personal' | 'generic';
+  type: "personal" | "generic";
   confidence: number;
   first_name?: string;
   last_name?: string;
@@ -14,8 +14,9 @@ interface Email {
   seniority?: string;
   verification?: {
     date: string;
-    status: 'valid' | 'accept_all' | 'unknown';
+    status: "valid" | "accept_all" | "unknown";
   };
+  provider?: "hunter" | "tomba";
 }
 
 interface EmailFinderModalProps {
@@ -25,14 +26,22 @@ interface EmailFinderModalProps {
   onClose: () => void;
 }
 
-export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFinderModalProps) {
+type EmailProvider = "hunter" | "tomba";
+
+export function EmailFinderModal({
+  leadId,
+  leadName,
+  domain,
+  onClose,
+}: EmailFinderModalProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [emails, setEmails] = useState<Email[]>([]);
-  const [organization, setOrganization] = useState<string>('');
-  const [pattern, setPattern] = useState<string>('');
+  const [organization, setOrganization] = useState<string>("");
+  const [pattern, setPattern] = useState<string>("");
   const [totalResults, setTotalResults] = useState<number>(0);
-  const [error, setError] = useState<string>('');
+  const [error, setError] = useState<string>("");
   const [hasSearched, setHasSearched] = useState(false);
+  const [provider, setProvider] = useState<EmailProvider>("hunter");
 
   // Load existing emails from database on mount
   useEffect(() => {
@@ -44,62 +53,86 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
 
     // Load emails from database
     const { data: emailData, error: emailError } = await supabase
-      .from('lead_emails')
-      .select('*')
-      .eq('lead_id', leadId)
-      .order('confidence', { ascending: false });
+      .from("lead_emails")
+      .select("*")
+      .eq("lead_id", leadId)
+      .order("confidence", { ascending: false });
 
     // Load lead metadata
     const { data: leadData } = await supabase
-      .from('leads')
-      .select('hunter_organization, hunter_email_pattern, hunter_total_emails, hunter_io_searched_at')
-      .eq('id', leadId)
+      .from("leads")
+      .select(
+        "hunter_organization, hunter_email_pattern, hunter_total_emails, hunter_io_searched_at, tomba_organization, tomba_email_pattern, tomba_total_emails, tomba_searched_at",
+      )
+      .eq("id", leadId)
       .single();
 
     if (emailData && emailData.length > 0) {
       setHasSearched(true);
-      setEmails(emailData.map(e => ({
-        value: e.email,
-        type: e.type as 'personal' | 'generic',
-        confidence: e.confidence,
-        first_name: e.first_name,
-        last_name: e.last_name,
-        position: e.position,
-        department: e.department,
-        seniority: e.seniority,
-        verification: e.verification_status ? {
-          date: e.verification_date,
-          status: e.verification_status as 'valid' | 'accept_all' | 'unknown',
-        } : undefined,
-      })));
+      setEmails(
+        emailData.map((e) => ({
+          value: e.email,
+          type: e.type as "personal" | "generic",
+          confidence: e.confidence,
+          first_name: e.first_name,
+          last_name: e.last_name,
+          position: e.position,
+          department: e.department,
+          seniority: e.seniority,
+          verification: e.verification_status
+            ? {
+                date: e.verification_date,
+                status: e.verification_status as
+                  | "valid"
+                  | "accept_all"
+                  | "unknown",
+              }
+            : undefined,
+          provider: e.provider as "hunter" | "tomba",
+        })),
+      );
     }
 
     if (leadData) {
-      setOrganization(leadData.hunter_organization || '');
-      setPattern(leadData.hunter_email_pattern || '');
-      setTotalResults(leadData.hunter_total_emails || 0);
-      if (leadData.hunter_io_searched_at) {
-        setHasSearched(true);
+      // Use the most recent search data based on provider
+      if (provider === "hunter") {
+        setOrganization(leadData.hunter_organization || "");
+        setPattern(leadData.hunter_email_pattern || "");
+        setTotalResults(leadData.hunter_total_emails || 0);
+        if (leadData.hunter_io_searched_at) {
+          setHasSearched(true);
+        }
+      } else {
+        setOrganization(leadData.tomba_organization || "");
+        setPattern(leadData.tomba_email_pattern || "");
+        setTotalResults(leadData.tomba_total_emails || 0);
+        if (leadData.tomba_searched_at) {
+          setHasSearched(true);
+        }
       }
     }
   };
 
   const handleSearch = async () => {
     setIsLoading(true);
-    setError('');
+    setError("");
     setHasSearched(true);
 
     try {
-      const response = await fetch('/api/hunter/domain-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const apiEndpoint =
+        provider === "hunter"
+          ? "/api/hunter/domain-search"
+          : "/api/tomba/domain-search";
+      const response = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ domain, leadId }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || 'Failed to fetch emails');
+        setError(data.error || "Failed to fetch emails");
         return;
       }
 
@@ -108,8 +141,8 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
       setPattern(data.data.pattern);
       setTotalResults(data.data.totalResults);
     } catch (err) {
-      console.error('Error fetching emails:', err);
-      setError('Failed to fetch emails. Please try again.');
+      console.error("Error fetching emails:", err);
+      setError("Failed to fetch emails. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -138,15 +171,44 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
         <div className="flex-1 overflow-y-auto p-6">
           {!hasSearched && (
             <div className="text-center py-8">
+              {/* Provider Selection */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Email Provider
+                </label>
+                <div className="flex justify-center gap-4">
+                  <button
+                    onClick={() => setProvider("hunter")}
+                    className={`px-4 py-2 rounded-lg border-2 transition-colors ${
+                      provider === "hunter"
+                        ? "border-purple-600 bg-purple-50 text-purple-700"
+                        : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                    }`}
+                  >
+                    Hunter.io
+                  </button>
+                  <button
+                    onClick={() => setProvider("tomba")}
+                    className={`px-4 py-2 rounded-lg border-2 transition-colors ${
+                      provider === "tomba"
+                        ? "border-blue-600 bg-blue-50 text-blue-700"
+                        : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                    }`}
+                  >
+                    Tomba.io
+                  </button>
+                </div>
+              </div>
               <p className="text-gray-600 mb-4">
-                Click the button below to search for business emails using Hunter.io
+                Click the button below to search for business emails using{" "}
+                {provider === "hunter" ? "Hunter.io" : "Tomba.io"}
               </p>
               <button
                 onClick={handleSearch}
                 disabled={isLoading}
                 className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
-                {isLoading ? 'Searching...' : '🔍 Search for Emails'}
+                {isLoading ? "Searching..." : "🔍 Search for Emails"}
               </button>
             </div>
           )}
@@ -162,20 +224,30 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
               {/* Organization Info */}
               {organization && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <h3 className="font-semibold text-blue-900 mb-2">Organization Details</h3>
+                  <h3 className="font-semibold text-blue-900 mb-2">
+                    Organization Details
+                  </h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <span className="text-blue-600 font-medium">Company:</span>{' '}
+                      <span className="text-blue-600 font-medium">
+                        Company:
+                      </span>{" "}
                       <span className="text-blue-900">{organization}</span>
                     </div>
                     {pattern && (
                       <div>
-                        <span className="text-blue-600 font-medium">Email Pattern:</span>{' '}
-                        <span className="text-blue-900 font-mono">{pattern}</span>
+                        <span className="text-blue-600 font-medium">
+                          Email Pattern:
+                        </span>{" "}
+                        <span className="text-blue-900 font-mono">
+                          {pattern}
+                        </span>
                       </div>
                     )}
                     <div>
-                      <span className="text-blue-600 font-medium">Total Emails Found:</span>{' '}
+                      <span className="text-blue-600 font-medium">
+                        Total Emails Found:
+                      </span>{" "}
                       <span className="text-blue-900">{totalResults}</span>
                     </div>
                   </div>
@@ -185,7 +257,9 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
               {/* Emails List */}
               {emails.length === 0 ? (
                 <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <p className="text-gray-600">No emails found for this domain</p>
+                  <p className="text-gray-600">
+                    No emails found for this domain
+                  </p>
                   <p className="text-sm text-gray-500 mt-2">
                     Try using the email pattern to reach out directly
                   </p>
@@ -193,7 +267,7 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
               ) : (
                 <div className="space-y-3">
                   <h3 className="font-semibold text-gray-900 mb-3">
-                    Found {emails.length} Email{emails.length !== 1 ? 's' : ''}
+                    Found {emails.length} Email{emails.length !== 1 ? "s" : ""}
                   </h3>
                   {emails.map((email, index) => (
                     <div
@@ -211,13 +285,26 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
                             </a>
                             <span
                               className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                email.type === 'personal'
-                                  ? 'bg-green-100 text-green-700'
-                                  : 'bg-gray-100 text-gray-700'
+                                email.type === "personal"
+                                  ? "bg-green-100 text-green-700"
+                                  : "bg-gray-100 text-gray-700"
                               }`}
                             >
                               {email.type}
                             </span>
+                            {email.provider && (
+                              <span
+                                className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                  email.provider === "hunter"
+                                    ? "bg-purple-100 text-purple-700"
+                                    : "bg-blue-100 text-blue-700"
+                                }`}
+                              >
+                                {email.provider === "hunter"
+                                  ? "Hunter"
+                                  : "Tomba"}
+                              </span>
+                            )}
                           </div>
                           {(email.first_name || email.last_name) && (
                             <p className="text-sm text-gray-700">
@@ -233,11 +320,11 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
                           {email.verification && (
                             <span
                               className={`inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium ${
-                                email.verification.status === 'valid'
-                                  ? 'bg-green-100 text-green-700'
-                                  : email.verification.status === 'accept_all'
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-gray-100 text-gray-700'
+                                email.verification.status === "valid"
+                                  ? "bg-green-100 text-green-700"
+                                  : email.verification.status === "accept_all"
+                                    ? "bg-yellow-100 text-yellow-700"
+                                    : "bg-gray-100 text-gray-700"
                               }`}
                             >
                               {email.verification.status}
@@ -272,7 +359,7 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
                   disabled={isLoading}
                   className="px-4 py-2 text-purple-600 border border-purple-600 rounded-lg font-medium hover:bg-purple-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  {isLoading ? 'Searching...' : '🔄 Search Again'}
+                  {isLoading ? "Searching..." : "🔄 Search Again"}
                 </button>
               </div>
             </>
@@ -283,7 +370,8 @@ export function EmailFinderModal({ leadId, leadName, domain, onClose }: EmailFin
         <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
           <div className="flex justify-between items-center">
             <p className="text-xs text-gray-500">
-              Powered by Hunter.io - Email finding service
+              Powered by {provider === "hunter" ? "Hunter.io" : "Tomba.io"} -
+              Email finding service
             </p>
             <button
               onClick={onClose}

@@ -1,100 +1,113 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { X, Mail, CheckCircle, XCircle, AlertCircle, Loader2 } from 'lucide-react'
+import { useState } from "react";
+import {
+  X,
+  Mail,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  Loader2,
+} from "lucide-react";
 
 interface BulkEmailFinderModalProps {
-  leadIds: string[]
-  onClose: () => void
-  onComplete: () => void
+  leadIds: string[];
+  onClose: () => void;
+  onComplete: () => void;
 }
 
 interface ProcessingResult {
-  leadId: string
-  leadName: string
-  domain?: string
-  status: 'success' | 'failed' | 'skipped'
-  reason?: string
-  emailsFound?: number
-  organization?: string
-  pattern?: string
+  leadId: string;
+  leadName: string;
+  domain?: string;
+  status: "success" | "failed" | "skipped";
+  reason?: string;
+  emailsFound?: number;
+  organization?: string;
+  pattern?: string;
 }
+
+type EmailProvider = "hunter" | "tomba";
 
 export default function BulkEmailFinderModal({
   leadIds,
   onClose,
-  onComplete
+  onComplete,
 }: BulkEmailFinderModalProps) {
-  const [isSearching, setIsSearching] = useState(false)
-  const [onlyMissing, setOnlyMissing] = useState(true)
+  const [isSearching, setIsSearching] = useState(false);
+  const [onlyMissing, setOnlyMissing] = useState(true);
+  const [provider, setProvider] = useState<EmailProvider>("hunter");
   const [results, setResults] = useState<{
-    total: number
-    processed: number
-    skipped: number
-    successful: number
-    failed: number
-    details: ProcessingResult[]
-  } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+    total: number;
+    processed: number;
+    skipped: number;
+    successful: number;
+    failed: number;
+    details: ProcessingResult[];
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSearch = async () => {
-    setIsSearching(true)
-    setError(null)
-    setResults(null)
+    setIsSearching(true);
+    setError(null);
+    setResults(null);
 
     try {
-      const response = await fetch('/api/hunter/bulk-search', {
-        method: 'POST',
+      const apiEndpoint =
+        provider === "hunter"
+          ? "/api/hunter/bulk-search"
+          : "/api/tomba/bulk-search";
+      const response = await fetch(apiEndpoint, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           leadIds,
-          onlyMissing
+          onlyMissing,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to search emails')
+        throw new Error(data.error || "Failed to search emails");
       }
 
-      setResults(data.results)
-      onComplete()
-
+      setResults(data.results);
+      onComplete();
     } catch (err: any) {
-      setError(err.message || 'An error occurred while searching for emails')
+      setError(err.message || "An error occurred while searching for emails");
     } finally {
-      setIsSearching(false)
+      setIsSearching(false);
     }
-  }
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'success':
-        return <CheckCircle className="w-4 h-4 text-green-500" />
-      case 'failed':
-        return <XCircle className="w-4 h-4 text-red-500" />
-      case 'skipped':
-        return <AlertCircle className="w-4 h-4 text-yellow-500" />
+      case "success":
+        return <CheckCircle className="w-4 h-4 text-green-500" />;
+      case "failed":
+        return <XCircle className="w-4 h-4 text-red-500" />;
+      case "skipped":
+        return <AlertCircle className="w-4 h-4 text-yellow-500" />;
       default:
-        return null
+        return null;
     }
-  }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'success':
-        return 'text-green-600 bg-green-50'
-      case 'failed':
-        return 'text-red-600 bg-red-50'
-      case 'skipped':
-        return 'text-yellow-600 bg-yellow-50'
+      case "success":
+        return "text-green-600 bg-green-50";
+      case "failed":
+        return "text-red-600 bg-red-50";
+      case "skipped":
+        return "text-yellow-600 bg-yellow-50";
       default:
-        return 'text-gray-600 bg-gray-50'
+        return "text-gray-600 bg-gray-50";
     }
-  }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -108,7 +121,8 @@ export default function BulkEmailFinderModal({
                 Bulk Email Search
               </h2>
               <p className="text-sm text-gray-500">
-                Search emails for {leadIds.length} lead{leadIds.length !== 1 ? 's' : ''}
+                Search emails for {leadIds.length} lead
+                {leadIds.length !== 1 ? "s" : ""}
               </p>
             </div>
           </div>
@@ -124,10 +138,43 @@ export default function BulkEmailFinderModal({
         <div className="flex-1 overflow-y-auto p-6">
           {!results && !isSearching && (
             <div className="space-y-6">
+              {/* Provider Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Email Provider
+                </label>
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setProvider("hunter")}
+                    className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${
+                      provider === "hunter"
+                        ? "border-purple-600 bg-purple-50 text-purple-700"
+                        : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                    }`}
+                  >
+                    Hunter.io
+                  </button>
+                  <button
+                    onClick={() => setProvider("tomba")}
+                    className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors ${
+                      provider === "tomba"
+                        ? "border-blue-600 bg-blue-50 text-blue-700"
+                        : "border-gray-300 bg-white text-gray-700 hover:border-gray-400"
+                    }`}
+                  >
+                    Tomba.io
+                  </button>
+                </div>
+              </div>
+
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <h3 className="font-medium text-blue-900 mb-2">How it works</h3>
                 <ul className="text-sm text-blue-800 space-y-1">
-                  <li>• Searches Hunter.io for emails at each lead's domain</li>
+                  <li>
+                    • Searches{" "}
+                    {provider === "hunter" ? "Hunter.io" : "Tomba.io"} for
+                    emails at each lead's domain
+                  </li>
                   <li>• Processes one lead per second to avoid rate limits</li>
                   <li>• Saves all discovered emails to your database</li>
                   <li>• Skips leads without a website domain</li>
@@ -158,9 +205,12 @@ export default function BulkEmailFinderModal({
           {isSearching && (
             <div className="flex flex-col items-center justify-center py-12">
               <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
-              <p className="text-gray-600 font-medium">Searching for emails...</p>
+              <p className="text-gray-600 font-medium">
+                Searching for emails...
+              </p>
               <p className="text-sm text-gray-500 mt-2">
-                This may take a while. Processing {leadIds.length} lead{leadIds.length !== 1 ? 's' : ''}...
+                This may take a while. Processing {leadIds.length} lead
+                {leadIds.length !== 1 ? "s" : ""}...
               </p>
             </div>
           )}
@@ -170,24 +220,35 @@ export default function BulkEmailFinderModal({
               {/* Summary Stats */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-gray-900">{results.total}</div>
+                  <div className="text-2xl font-bold text-gray-900">
+                    {results.total}
+                  </div>
                   <div className="text-sm text-gray-600">Total Leads</div>
                 </div>
                 <div className="bg-green-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-green-600">{results.successful}</div>
+                  <div className="text-2xl font-bold text-green-600">
+                    {results.successful}
+                  </div>
                   <div className="text-sm text-green-700">Successful</div>
                 </div>
                 <div className="bg-red-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-red-600">{results.failed}</div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {results.failed}
+                  </div>
                   <div className="text-sm text-red-700">Failed</div>
                 </div>
                 <div className="bg-yellow-50 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-yellow-600">{results.skipped}</div>
+                  <div className="text-2xl font-bold text-yellow-600">
+                    {results.skipped}
+                  </div>
                   <div className="text-sm text-yellow-700">Skipped</div>
                 </div>
                 <div className="bg-blue-50 rounded-lg p-4">
                   <div className="text-2xl font-bold text-blue-600">
-                    {results.details.reduce((sum, d) => sum + (d.emailsFound || 0), 0)}
+                    {results.details.reduce(
+                      (sum, d) => sum + (d.emailsFound || 0),
+                      0,
+                    )}
                   </div>
                   <div className="text-sm text-blue-700">Emails Found</div>
                 </div>
@@ -195,17 +256,19 @@ export default function BulkEmailFinderModal({
 
               {/* Detailed Results */}
               <div>
-                <h3 className="font-medium text-gray-900 mb-3">Detailed Results</h3>
+                <h3 className="font-medium text-gray-900 mb-3">
+                  Detailed Results
+                </h3>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
                   {results.details.map((detail, index) => (
                     <div
                       key={index}
                       className={`flex items-start gap-3 p-3 rounded-lg border ${
-                        detail.status === 'success'
-                          ? 'border-green-200 bg-green-50'
-                          : detail.status === 'failed'
-                          ? 'border-red-200 bg-red-50'
-                          : 'border-yellow-200 bg-yellow-50'
+                        detail.status === "success"
+                          ? "border-green-200 bg-green-50"
+                          : detail.status === "failed"
+                            ? "border-red-200 bg-red-50"
+                            : "border-yellow-200 bg-yellow-50"
                       }`}
                     >
                       <div className="flex-shrink-0 mt-0.5">
@@ -220,12 +283,17 @@ export default function BulkEmailFinderModal({
                             {detail.domain}
                           </div>
                         )}
-                        {detail.status === 'success' && (
+                        {detail.status === "success" && (
                           <div className="text-sm text-gray-700 mt-1">
-                            Found {detail.emailsFound} email{detail.emailsFound !== 1 ? 's' : ''}
-                            {detail.organization && ` at ${detail.organization}`}
+                            Found {detail.emailsFound} email
+                            {detail.emailsFound !== 1 ? "s" : ""}
+                            {detail.organization &&
+                              ` at ${detail.organization}`}
                             {detail.pattern && (
-                              <span className="text-gray-500"> • Pattern: {detail.pattern}</span>
+                              <span className="text-gray-500">
+                                {" "}
+                                • Pattern: {detail.pattern}
+                              </span>
                             )}
                           </div>
                         )}
@@ -235,7 +303,9 @@ export default function BulkEmailFinderModal({
                           </div>
                         )}
                       </div>
-                      <div className={`flex-shrink-0 px-2 py-1 rounded text-xs font-medium ${getStatusColor(detail.status)}`}>
+                      <div
+                        className={`flex-shrink-0 px-2 py-1 rounded text-xs font-medium ${getStatusColor(detail.status)}`}
+                      >
                         {detail.status}
                       </div>
                     </div>
@@ -297,5 +367,5 @@ export default function BulkEmailFinderModal({
         </div>
       </div>
     </div>
-  )
+  );
 }
