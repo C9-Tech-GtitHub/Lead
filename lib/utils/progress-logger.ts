@@ -19,6 +19,7 @@ export type ProgressEventType =
   | "lead_research_failed"
   | "lead_deep_research_completed"
   | "deep_research_batch_started"
+  | "emails_found"
   | "lead_failed"
   | "run_completed"
   | "run_failed"
