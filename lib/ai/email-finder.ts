@@ -41,11 +41,17 @@ function getOpenAIClient(): OpenAI {
 }
 
 export async function findEmailsWithAI(
-  params: EmailFinderParams
+  params: EmailFinderParams,
 ): Promise<EmailFinderResult> {
   try {
-    console.log(`[AI Email Finder] Searching for emails: ${params.name}`);
+    console.log(
+      `[AI Email Finder] Searching for emails: ${params.name} at ${params.domain}`,
+    );
     const openai = getOpenAIClient();
+
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not configured");
+    }
 
     const userPrompt = `Find business contact emails for the following company:
 
@@ -93,10 +99,10 @@ If no emails found, return empty emails array with summary of why.`;
       max_output_tokens: 2000,
       tools: [
         {
-          type: "web_search_preview",
+          type: "web_search",
         },
       ],
-      tool_choice: "required", // Force it to use web search
+      tool_choice: "auto", // Let it decide when to use web search
       input: [
         {
           role: "system",
@@ -113,22 +119,48 @@ You prioritize decision-makers and key contacts over generic emails.`,
       ],
     });
 
+    console.log(`[AI Email Finder] Response received, parsing output...`);
+
     const content = response.output_text;
 
     if (!content) {
+      console.error("[AI Email Finder] No output_text in response");
       throw new Error("No response from GPT-5");
     }
+
+    console.log(
+      `[AI Email Finder] Output length: ${content.length} characters`,
+    );
 
     // Parse the JSON response
     let result: EmailFinderResult;
     try {
       // Extract JSON from markdown code blocks if present
-      const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) ||
-                        content.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-      result = JSON.parse(jsonStr);
+      const jsonMatch =
+        content.match(/```json\s*([\s\S]*?)\s*```/) ||
+        content.match(/\{[\s\S]*\}/);
+
+      if (!jsonMatch) {
+        console.log(
+          "[AI Email Finder] No JSON found in response, treating as plain text",
+        );
+        result = {
+          emails: [],
+          searchSummary: content,
+        };
+      } else {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        console.log(
+          `[AI Email Finder] Attempting to parse JSON: ${jsonStr.substring(0, 200)}...`,
+        );
+        result = JSON.parse(jsonStr);
+      }
     } catch (parseError) {
-      console.error("[AI Email Finder] Failed to parse response:", content);
+      console.error("[AI Email Finder] Failed to parse JSON:", parseError);
+      console.error(
+        "[AI Email Finder] Raw content:",
+        content.substring(0, 1000),
+      );
       // Return empty result with the raw content as summary
       result = {
         emails: [],
@@ -137,14 +169,14 @@ You prioritize decision-makers and key contacts over generic emails.`,
     }
 
     console.log(
-      `[AI Email Finder] Found ${result.emails.length} email(s) for ${params.name}`
+      `[AI Email Finder] Found ${result.emails.length} email(s) for ${params.name}`,
     );
 
     return result;
   } catch (error) {
     console.error("[AI Email Finder] Error:", error);
     throw new Error(
-      `Failed to find emails: ${error instanceof Error ? error.message : "Unknown error"}`
+      `Failed to find emails: ${error instanceof Error ? error.message : "Unknown error"}`,
     );
   }
 }
