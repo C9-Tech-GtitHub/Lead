@@ -34,7 +34,9 @@ export async function POST(request: Request) {
     // Fetch leads with their domains (no user filtering - all users can access all leads)
     const { data: leads, error: leadsError } = await supabase
       .from("leads")
-      .select("id, name, website, hunter_io_searched_at")
+      .select(
+        "id, name, website, hunter_io_searched_at, tomba_searched_at, ai_email_searched_at",
+      )
       .in("id", leadIds);
 
     if (leadsError) {
@@ -71,13 +73,18 @@ export async function POST(request: Request) {
       }
 
       // Skip if already searched and onlyMissing is true
-      if (onlyMissing && lead.hunter_io_searched_at) {
+      if (
+        onlyMissing &&
+        (lead.hunter_io_searched_at ||
+          lead.tomba_searched_at ||
+          lead.ai_email_searched_at)
+      ) {
         results.skipped++;
         results.details.push({
           leadId: lead.id,
           leadName: lead.name,
           status: "skipped",
-          reason: "Already searched",
+          reason: "Already searched with Hunter/Tomba/AI",
         });
         continue;
       }
