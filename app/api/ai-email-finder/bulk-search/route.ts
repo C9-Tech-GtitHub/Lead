@@ -106,11 +106,28 @@ export async function POST(request: Request) {
         console.log(`[AI Email Finder] Processing ${lead.name} at ${domain}`);
 
         // Use AI to find emails
-        const aiResult = await findEmailsWithAI({
-          name: lead.name,
-          website: lead.website,
-          domain: domain,
-        });
+        let aiResult;
+        try {
+          aiResult = await findEmailsWithAI({
+            name: lead.name,
+            website: lead.website,
+            domain: domain,
+          });
+        } catch (aiError: any) {
+          console.error(
+            `[AI Email Finder] AI search failed for ${lead.name}:`,
+            aiError.message,
+          );
+          results.failed++;
+          results.processed++;
+          results.details.push({
+            leadId: lead.id,
+            leadName: lead.name,
+            status: "failed",
+            reason: `AI search error: ${aiError.message}`,
+          });
+          continue;
+        }
 
         // Update lead with AI search metadata
         const { error: updateError } = await supabase

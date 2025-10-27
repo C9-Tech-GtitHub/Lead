@@ -93,34 +93,51 @@ Respond in this exact JSON format:
 If no emails found, return empty emails array with summary of why.`;
 
     // Call GPT-5 mini with web search enabled (cheaper: $0.25/$2 per 1M tokens)
-    const response = await openai.responses.create({
-      model: "gpt-5-mini",
-      reasoning: { effort: "low" }, // Reduce reasoning effort to save tokens
-      max_output_tokens: 8000, // Increased to handle web search results
-      tools: [
-        {
-          type: "web_search_preview",
-        },
-      ],
-      tool_choice: "auto", // Let it decide when to use web search
-      input: [
-        {
-          role: "system",
-          content: `You are an expert at finding business contact information through web research.
+    let response;
+    try {
+      response = await openai.responses.create({
+        model: "gpt-5-mini",
+        reasoning: { effort: "low" }, // Reduce reasoning effort to save tokens
+        max_output_tokens: 8000, // Increased to handle web search results
+        tools: [
+          {
+            type: "web_search_preview",
+          },
+        ],
+        tool_choice: "auto", // Let it decide when to use web search
+        input: [
+          {
+            role: "system",
+            content: `You are an expert at finding business contact information through web research.
 You use public sources like company websites, LinkedIn, business directories, and professional networks.
 You NEVER fabricate or guess email addresses.
 You always cite your sources and rate confidence based on verification level.
 You prioritize decision-makers and key contacts over generic emails.`,
-        },
-        {
-          role: "user",
-          content: userPrompt,
-        },
-      ],
-    });
+          },
+          {
+            role: "user",
+            content: userPrompt,
+          },
+        ],
+      });
+    } catch (apiError: any) {
+      console.error("[AI Email Finder] OpenAI API error:", apiError);
+      throw new Error(
+        `OpenAI API error: ${apiError.message || "Unknown API error"}`,
+      );
+    }
 
     console.log(`[AI Email Finder] Response received, parsing output...`);
     console.log(`[AI Email Finder] Status:`, response.status);
+    console.log(`[AI Email Finder] Response type:`, typeof response);
+
+    // Log the full response structure for debugging
+    if (response.status !== "completed") {
+      console.warn(
+        "[AI Email Finder] Non-completed status, full response:",
+        JSON.stringify(response, null, 2).substring(0, 1000),
+      );
+    }
 
     // Check if response is incomplete
     if (response.status === "incomplete") {
@@ -136,16 +153,31 @@ You prioritize decision-makers and key contacts over generic emails.`,
       throw new Error(`AI search incomplete: ${reason || "unknown reason"}`);
     }
 
+    // Check for error status
+    if (response.status === "failed") {
+      console.error("[AI Email Finder] Response failed:", response);
+      throw new Error(
+        `AI search failed: ${(response as any).error?.message || "Unknown error"}`,
+      );
+    }
+
     // Try different possible response formats
-    let content =
-      response.output_text ||
-      (response.output && Array.isArray(response.output)
-        ? response.output
-            .filter((item: any) => item.type === "text")
-            .map((item: any) => item.text)
-            .join("\n")
-        : "") ||
-      (typeof response.output === "string" ? response.output : "");
+    let content = "";
+
+    if (response.output_text) {
+      content = response.output_text;
+    } else if (response.output && Array.isArray(response.output)) {
+      // Only extract text content, skip reasoning and other types
+      const textItems = response.output.filter(
+        (item: any) => item.type === "text",
+      );
+      console.log(
+        `[AI Email Finder] Found ${textItems.length} text items in output array`,
+      );
+      content = textItems.map((item: any) => item.text).join("\n");
+    } else if (typeof response.output === "string") {
+      content = response.output;
+    }
 
     if (!content) {
       console.error(
@@ -153,14 +185,17 @@ You prioritize decision-makers and key contacts over generic emails.`,
         response.status,
       );
       console.error(
-        "[AI Email Finder] Output array:",
-        JSON.stringify(response.output?.slice(0, 3), null, 2),
+        "[AI Email Finder] Output structure:",
+        JSON.stringify(response.output, null, 2)?.substring(0, 500),
       );
       throw new Error("No text output from GPT-5 mini");
     }
 
     console.log(
       `[AI Email Finder] Output length: ${content.length} characters`,
+    );
+    console.log(
+      `[AI Email Finder] First 200 chars: ${content.substring(0, 200)}`,
     );
 
     // Parse the JSON response
