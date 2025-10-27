@@ -1212,6 +1212,162 @@ export const deepResearchIndividualLead = inngest.createFunction(
       });
     });
 
+    // Step 5: Find emails using Tomba.io (primary) with Hunter.io fallback
+    await step.run("find-emails", async () => {
+      if (!lead.website) {
+        console.log(`[Email Finder] Skipping ${lead.name} - no website`);
+        return;
+      }
+
+      // Extract domain from website
+      const domain = lead.website
+        .replace(/^(https?:\/\/)?(www\.)?/, "")
+        .split("/")[0];
+
+      console.log(
+        `[Email Finder] Searching for emails at ${domain} for ${lead.name}`,
+      );
+
+      const supabase = createAdminClient();
+
+      // Try Tomba.io first (50 free requests/month)
+      try {
+        const tombaApiKey = process.env.TOMBA_API_KEY;
+        if (tombaApiKey) {
+          const tombaUrl = `https://api.tomba.io/v1/domain-search?domain=${encodeURIComponent(domain)}`;
+          const tombaResponse = await fetch(tombaUrl, {
+            headers: {
+              "X-Tomba-Key": tombaApiKey,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (tombaResponse.ok) {
+            const tombaData = await tombaResponse.json();
+            const emails = tombaData.data?.emails || [];
+
+            console.log(
+              `[Email Finder] Tomba found ${emails.length} emails for ${domain}`,
+            );
+
+            // Update lead metadata
+            await supabase
+              .from("leads")
+              .update({
+                tomba_searched_at: new Date().toISOString(),
+                tomba_organization: tombaData.data?.organization,
+                tomba_email_pattern: tombaData.data?.pattern,
+                tomba_total_emails: tombaData.meta?.total || 0,
+              })
+              .eq("id", leadId);
+
+            // Save emails
+            if (emails.length > 0) {
+              const emailRecords = emails.map((email: any) => ({
+                lead_id: leadId,
+                user_id: runDetails.user_id,
+                email: email.email,
+                type: email.type === "generic" ? "generic" : "personal",
+                confidence: email.score || 0,
+                first_name: email.first_name,
+                last_name: email.last_name,
+                position: email.position,
+                department: email.department,
+                seniority: email.seniority,
+                verification_status: email.verification?.status || "unknown",
+                verification_date: email.verification?.date || null,
+                sources: email.sources || [],
+                provider: "tomba",
+              }));
+
+              await supabase.from("lead_emails").insert(emailRecords);
+
+              await logProgress({
+                runId,
+                userId: runDetails.user_id,
+                eventType: "emails_found",
+                message: `Found ${emails.length} email(s) for ${lead.name} via Tomba.io`,
+                details: {
+                  leadName: lead.name,
+                  emailsFound: emails.length,
+                  provider: "tomba",
+                },
+              });
+
+              return;
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[Email Finder] Tomba.io error:", error);
+      }
+
+      // Fallback to Hunter.io (25 free requests/month)
+      try {
+        const hunterApiKey = process.env.HUNTER_API_KEY;
+        if (hunterApiKey) {
+          const hunterUrl = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${hunterApiKey}`;
+          const hunterResponse = await fetch(hunterUrl);
+
+          if (hunterResponse.ok) {
+            const hunterData = await hunterResponse.json();
+            const emails = hunterData.data?.emails || [];
+
+            console.log(
+              `[Email Finder] Hunter found ${emails.length} emails for ${domain}`,
+            );
+
+            // Update lead metadata
+            await supabase
+              .from("leads")
+              .update({
+                hunter_io_searched_at: new Date().toISOString(),
+                hunter_organization: hunterData.data?.organization,
+                hunter_email_pattern: hunterData.data?.pattern,
+                hunter_total_emails: hunterData.meta?.results || 0,
+              })
+              .eq("id", leadId);
+
+            // Save emails
+            if (emails.length > 0) {
+              const emailRecords = emails.map((email: any) => ({
+                lead_id: leadId,
+                user_id: runDetails.user_id,
+                email: email.value,
+                type: email.type,
+                confidence: email.confidence,
+                first_name: email.first_name,
+                last_name: email.last_name,
+                position: email.position,
+                department: email.department,
+                seniority: email.seniority,
+                verification_status: email.verification?.status || "unknown",
+                verification_date: email.verification?.date || null,
+                sources: email.sources || [],
+                provider: "hunter",
+              }));
+
+              await supabase.from("lead_emails").insert(emailRecords);
+
+              await logProgress({
+                runId,
+                userId: runDetails.user_id,
+                eventType: "emails_found",
+                message: `Found ${emails.length} email(s) for ${lead.name} via Hunter.io`,
+                details: {
+                  leadName: lead.name,
+                  emailsFound: emails.length,
+                  provider: "hunter",
+                },
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[Email Finder] Hunter.io error:", error);
+      }
+    });
+
     return { success: true, leadId, grade: analysis.grade };
   },
 );
