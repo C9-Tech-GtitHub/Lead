@@ -37,6 +37,8 @@ export default function BulkEmailFinderModal({
   const [isSearching, setIsSearching] = useState(false);
   const [onlyMissing, setOnlyMissing] = useState(true);
   const [provider, setProvider] = useState<EmailProvider>("hunter");
+  const [progress, setProgress] = useState(0);
+  const [estimatedTime, setEstimatedTime] = useState<string>("");
   const [results, setResults] = useState<{
     total: number;
     processed: number;
@@ -51,6 +53,22 @@ export default function BulkEmailFinderModal({
     setIsSearching(true);
     setError(null);
     setResults(null);
+    setProgress(0);
+
+    // Calculate estimated time
+    const timePerLead = provider === "ai" ? 2 : 1; // AI takes 2 seconds, others take 1 second
+    const totalSeconds = leadIds.length * timePerLead;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    setEstimatedTime(minutes > 0 ? `~${minutes}m ${seconds}s` : `~${seconds}s`);
+
+    // Simulate progress updates
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 95) return prev; // Cap at 95% until actual completion
+        return prev + 100 / leadIds.length;
+      });
+    }, timePerLead * 1000);
 
     try {
       const apiEndpoint =
@@ -70,6 +88,9 @@ export default function BulkEmailFinderModal({
         }),
       });
 
+      clearInterval(progressInterval);
+      setProgress(100);
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -79,6 +100,7 @@ export default function BulkEmailFinderModal({
       setResults(data.results);
       onComplete();
     } catch (err: any) {
+      clearInterval(progressInterval);
       setError(err.message || "An error occurred while searching for emails");
     } finally {
       setIsSearching(false);
@@ -233,15 +255,34 @@ export default function BulkEmailFinderModal({
           )}
 
           {isSearching && (
-            <div className="flex flex-col items-center justify-center py-12">
+            <div className="flex flex-col items-center justify-center py-12 px-8">
               <Loader2 className="w-12 h-12 text-blue-600 animate-spin mb-4" />
               <p className="text-gray-600 font-medium">
                 Searching for emails...
               </p>
-              <p className="text-sm text-gray-500 mt-2">
-                This may take a while. Processing {leadIds.length} lead
-                {leadIds.length !== 1 ? "s" : ""}...
+              <p className="text-sm text-gray-500 mt-2 mb-6">
+                Processing {leadIds.length} lead
+                {leadIds.length !== 1 ? "s" : ""} • Estimated time:{" "}
+                {estimatedTime}
               </p>
+
+              {/* Progress Bar */}
+              <div className="w-full max-w-md">
+                <div className="flex justify-between text-sm text-gray-600 mb-2">
+                  <span>Progress</span>
+                  <span>{Math.round(progress)}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-full rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  {Math.round((progress / 100) * leadIds.length)} of{" "}
+                  {leadIds.length} leads processed
+                </p>
+              </div>
             </div>
           )}
 

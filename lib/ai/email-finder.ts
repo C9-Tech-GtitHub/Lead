@@ -177,14 +177,40 @@ You prioritize decision-makers and key contacts over generic emails.`,
         );
         result = {
           emails: [],
-          searchSummary: content,
+          searchSummary: content.substring(0, 1000), // Limit summary length
         };
       } else {
         const jsonStr = jsonMatch[1] || jsonMatch[0];
         console.log(
           `[AI Email Finder] Attempting to parse JSON: ${jsonStr.substring(0, 200)}...`,
         );
-        result = JSON.parse(jsonStr);
+
+        // Try to parse the JSON
+        try {
+          result = JSON.parse(jsonStr);
+        } catch (jsonError) {
+          // If parsing fails, try to clean up the JSON string
+          console.warn(
+            "[AI Email Finder] Initial JSON parse failed, attempting cleanup",
+          );
+
+          // Remove any trailing incomplete text after the last closing brace
+          const lastBrace = jsonStr.lastIndexOf("}");
+          if (lastBrace !== -1) {
+            const cleanedJson = jsonStr.substring(0, lastBrace + 1);
+            console.log(
+              `[AI Email Finder] Trying cleaned JSON (length ${cleanedJson.length})`,
+            );
+            result = JSON.parse(cleanedJson);
+          } else {
+            throw jsonError; // Re-throw if we can't clean it
+          }
+        }
+      }
+
+      // Truncate searchSummary if it's too long to avoid database issues
+      if (result.searchSummary && result.searchSummary.length > 2000) {
+        result.searchSummary = result.searchSummary.substring(0, 1997) + "...";
       }
     } catch (parseError) {
       console.error("[AI Email Finder] Failed to parse JSON:", parseError);

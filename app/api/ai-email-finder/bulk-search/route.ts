@@ -113,7 +113,7 @@ export async function POST(request: Request) {
         });
 
         // Update lead with AI search metadata
-        await supabase
+        const { error: updateError } = await supabase
           .from("leads")
           .update({
             hunter_io_searched_at: new Date().toISOString(), // Reuse field for tracking
@@ -125,6 +125,14 @@ export async function POST(request: Request) {
               aiResult.emails.length === 0 ? aiResult.searchSummary : null,
           })
           .eq("id", lead.id);
+
+        if (updateError) {
+          console.error("[AI Email Finder] Error updating lead:", updateError);
+        } else {
+          console.log(
+            `[AI Email Finder] Successfully updated lead ${lead.id} metadata`,
+          );
+        }
 
         // Save emails if any found
         if (aiResult.emails.length > 0) {
