@@ -36,13 +36,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch leads with their domains
-    console.log("[AI Email Finder Bulk] Querying leads for user:", user.id);
+    // Fetch leads with their domains (no user filtering - all users can access all leads)
+    console.log("[AI Email Finder Bulk] Querying leads");
     const { data: leads, error: leadsError } = await supabase
       .from("leads")
       .select("id, name, website, hunter_io_searched_at, tomba_searched_at")
-      .in("id", leadIds)
-      .eq("user_id", user.id);
+      .in("id", leadIds);
 
     if (leadsError) {
       console.error("[AI Email Finder Bulk] Database error:", leadsError);

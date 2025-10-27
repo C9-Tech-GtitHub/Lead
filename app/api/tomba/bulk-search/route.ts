@@ -31,12 +31,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch leads with their domains
+    // Fetch leads with their domains (no user filtering - all users can access all leads)
     const { data: leads, error: leadsError } = await supabase
       .from("leads")
       .select("id, name, website, tomba_searched_at")
-      .in("id", leadIds)
-      .eq("user_id", user.id);
+      .in("id", leadIds);
 
     if (leadsError) {
       return NextResponse.json({ error: leadsError.message }, { status: 500 });
