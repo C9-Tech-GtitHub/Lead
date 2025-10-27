@@ -95,8 +95,8 @@ If no emails found, return empty emails array with summary of why.`;
     // Call GPT-5 mini with web search enabled (cheaper: $0.25/$2 per 1M tokens)
     const response = await openai.responses.create({
       model: "gpt-5-mini",
-      reasoning: { effort: "medium" },
-      max_output_tokens: 2000,
+      reasoning: { effort: "low" }, // Reduce reasoning effort to save tokens
+      max_output_tokens: 8000, // Increased to handle web search results
       tools: [
         {
           type: "web_search_preview",
@@ -120,20 +120,21 @@ You prioritize decision-makers and key contacts over generic emails.`,
     });
 
     console.log(`[AI Email Finder] Response received, parsing output...`);
-    console.log(`[AI Email Finder] Response type:`, typeof response);
-    console.log(`[AI Email Finder] Response keys:`, Object.keys(response));
-    console.log(`[AI Email Finder] output_text value:`, response.output_text);
-    console.log(
-      `[AI Email Finder] output_text type:`,
-      typeof response.output_text,
-    );
+    console.log(`[AI Email Finder] Status:`, response.status);
 
-    // Log the full response structure (truncated for safety)
-    const responseStr = JSON.stringify(response, null, 2);
-    console.log(
-      `[AI Email Finder] Full response (first 1000 chars):`,
-      responseStr.substring(0, 1000),
-    );
+    // Check if response is incomplete
+    if (response.status === "incomplete") {
+      const reason = response.incomplete_details?.reason;
+      console.warn(`[AI Email Finder] Response incomplete due to: ${reason}`);
+
+      if (reason === "max_output_tokens") {
+        throw new Error(
+          "AI search incomplete - response was too long. Try again or use Hunter/Tomba instead.",
+        );
+      }
+
+      throw new Error(`AI search incomplete: ${reason || "unknown reason"}`);
+    }
 
     // Try different possible response formats
     let content =
@@ -148,10 +149,14 @@ You prioritize decision-makers and key contacts over generic emails.`,
 
     if (!content) {
       console.error(
-        "[AI Email Finder] No content found in response - full object:",
-        responseStr,
+        "[AI Email Finder] No content in response. Status:",
+        response.status,
       );
-      throw new Error("No response from GPT-5");
+      console.error(
+        "[AI Email Finder] Output array:",
+        JSON.stringify(response.output?.slice(0, 3), null, 2),
+      );
+      throw new Error("No text output from GPT-5 mini");
     }
 
     console.log(
