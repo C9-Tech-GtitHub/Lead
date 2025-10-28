@@ -27,11 +27,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { leadIds } = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError: any) {
+      console.error("[Bulk SendGrid Check] JSON parse error:", parseError);
+      return NextResponse.json(
+        { error: "Invalid JSON in request body", details: parseError.message },
+        { status: 400 },
+      );
+    }
+
+    const { leadIds } = body;
+
+    console.log("[Bulk SendGrid Check] Request body:", body);
+    console.log("[Bulk SendGrid Check] Lead IDs received:", leadIds);
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+      console.error("[Bulk SendGrid Check] Invalid leadIds:", leadIds);
       return NextResponse.json(
-        { error: "Lead IDs are required" },
+        {
+          error: "Lead IDs are required",
+          received: leadIds,
+          type: typeof leadIds,
+          isArray: Array.isArray(leadIds),
+        },
         { status: 400 },
       );
     }
