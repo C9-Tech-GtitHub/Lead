@@ -182,11 +182,13 @@ export async function POST(request: NextRequest) {
       if (leadResult.status === "safe" && leadResult.issues.length === 0) {
         results.safe++;
         // Safe leads - set status to indicate they can be contacted
-        newEmailStatus = "verified";
+        // Valid values: unknown, valid, suppressed, bounced, unsubscribed, invalid
+        newEmailStatus = "valid";
       } else if (leadResult.status === "warning") {
         results.warnings++;
         // Warning - previously sent or minor issues
-        newEmailStatus = "previously_sent";
+        // Keep as valid since they can still be contacted (just with caution)
+        newEmailStatus = "valid";
       } else if (leadResult.status === "blocked") {
         results.blocked++;
         // Blocked - determine specific reason
@@ -198,11 +200,22 @@ export async function POST(request: NextRequest) {
         );
 
         if (hasSuppressionIssue) {
-          newEmailStatus = "suppressed";
+          // Check if it's a bounce or unsubscribe
+          const suppressionIssue = leadResult.issues.find(
+            (issue: any) => issue.type === "suppressed",
+          );
+          if (suppressionIssue?.source === "bounce") {
+            newEmailStatus = "bounced";
+          } else if (suppressionIssue?.source === "unsubscribe") {
+            newEmailStatus = "unsubscribed";
+          } else {
+            newEmailStatus = "suppressed";
+          }
         } else if (hasCadenceIssue) {
-          newEmailStatus = "cadence_restricted";
+          // Cadence restricted - keep as valid but recently contacted
+          newEmailStatus = "valid";
         } else {
-          newEmailStatus = "unavailable";
+          newEmailStatus = "invalid";
         }
       }
 
