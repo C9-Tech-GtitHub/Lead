@@ -159,9 +159,7 @@ export async function POST(request: Request) {
             lead_id: lead.id,
             user_id: user.id,
             email: email.email,
-            type: email.email.match(/^(info|contact|hello|support|sales)@/)
-              ? "generic"
-              : "personal",
+            type: email.type || "personal", // Use classification from AI finder
             confidence: email.confidence,
             first_name: email.firstName || null,
             last_name: email.lastName || null,
@@ -172,6 +170,11 @@ export async function POST(request: Request) {
             verification_date: null,
             sources: [{ url: email.source, type: "ai_web_search" }],
             provider: "ai",
+            // New classification fields
+            email_category: email.email_category || null,
+            priority_score: email.priority_score || null,
+            classification_reasoning: email.classification_reasoning || null,
+            is_recommended: email.is_recommended || false,
           }));
 
           console.log(

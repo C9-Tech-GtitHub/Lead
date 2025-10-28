@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { classifyEmail, getSimpleType } from "@/lib/email-classifier";
 
 export async function POST(request: Request) {
   console.log("[Hunter Bulk] Route hit - starting bulk email search");
@@ -146,21 +147,37 @@ export async function POST(request: Request) {
 
         // Insert new emails if any found
         if (domainData.emails && domainData.emails.length > 0) {
-          const emailRecords = domainData.emails.map((email: any) => ({
-            lead_id: lead.id,
-            user_id: user.id,
-            email: email.value,
-            type: email.type,
-            confidence: email.confidence,
-            first_name: email.first_name,
-            last_name: email.last_name,
-            position: email.position,
-            department: email.department,
-            seniority: email.seniority,
-            verification_status: email.verification?.status || "unknown",
-            verification_date: email.verification?.date || null,
-            sources: email.sources || [],
-          }));
+          const emailRecords = domainData.emails.map((email: any) => {
+            // Classify email using our enhanced classifier
+            const classification = classifyEmail(
+              email.value,
+              email.first_name,
+              email.last_name,
+              email.position,
+            );
+
+            return {
+              lead_id: lead.id,
+              user_id: user.id,
+              email: email.value,
+              type: getSimpleType(classification.category),
+              confidence: email.confidence,
+              first_name: email.first_name,
+              last_name: email.last_name,
+              position: email.position,
+              department: email.department,
+              seniority: email.seniority,
+              verification_status: email.verification?.status || "unknown",
+              verification_date: email.verification?.date || null,
+              sources: email.sources || [],
+              provider: "hunter",
+              // New classification fields
+              email_category: classification.category,
+              priority_score: classification.priorityScore,
+              classification_reasoning: classification.reasoning,
+              is_recommended: classification.isRecommended,
+            };
+          });
 
           const { error: insertError } = await supabase
             .from("lead_emails")

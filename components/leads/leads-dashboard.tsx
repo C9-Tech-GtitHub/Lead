@@ -121,6 +121,11 @@ export function LeadsDashboard({
     useState<string>("all");
   const [aiSearchedNoEmails, setAiSearchedNoEmails] = useState<string>("all");
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
+  const [selectedRuns, setSelectedRuns] = useState<Set<string>>(new Set());
+  const [showRunSelector, setShowRunSelector] = useState(false);
+  const [hideDuplicates, setHideDuplicates] = useState(true);
+  const [sortField, setSortField] = useState<string>("created_at");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [isExporting, setIsExporting] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -149,25 +154,40 @@ export function LeadsDashboard({
   const fetchLeads = async () => {
     setIsLoading(true);
     try {
+      // Determine run filter value
+      let runFilterValue = runFilter;
+      if (selectedRuns.size > 0) {
+        runFilterValue = Array.from(selectedRuns).join(",");
+      }
+
       const params = new URLSearchParams({
         page: currentPage.toString(),
         pageSize: pageSize.toString(),
         status: statusFilter,
         grade: gradeFilter,
         gradeRange: gradeRangeFilter,
-        run: runFilter,
+        run: runFilterValue,
         emailStatus: emailStatusFilter,
         search: searchQuery,
         emailType: emailTypeFilter,
         emailEligibility: emailEligibilityFilter,
         aiSearchedNoEmails: aiSearchedNoEmails,
+        sortField: sortField,
+        sortDirection: sortDirection,
       });
 
       const response = await fetch(`/api/leads?${params}`);
       const data = await response.json();
 
       if (response.ok) {
-        setLeads(data.leads);
+        let fetchedLeads = data.leads;
+
+        // Apply client-side duplicate detection if multiple runs selected
+        if (selectedRuns.size > 1 && hideDuplicates) {
+          fetchedLeads = removeDuplicateLeads(fetchedLeads);
+        }
+
+        setLeads(fetchedLeads);
         setEmailCounts(data.emailCounts);
         setTotalCount(data.pagination.total);
         setTotalPages(data.pagination.totalPages);
@@ -176,6 +196,51 @@ export function LeadsDashboard({
       console.error("Error fetching leads:", error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Remove duplicate leads based on website domain or name
+  const removeDuplicateLeads = (leads: Lead[]): Lead[] => {
+    const seen = new Map<string, Lead>();
+
+    leads.forEach((lead) => {
+      // Create a key based on website domain (preferred) or normalized name
+      let key: string;
+      if (lead.website) {
+        // Extract domain from website
+        try {
+          const url = new URL(
+            lead.website.startsWith("http")
+              ? lead.website
+              : `https://${lead.website}`,
+          );
+          key = url.hostname.replace(/^www\./, "").toLowerCase();
+        } catch {
+          key = lead.website.toLowerCase();
+        }
+      } else {
+        // Use normalized name if no website
+        key = lead.name.toLowerCase().trim();
+      }
+
+      // Keep the newest version (already sorted by created_at)
+      if (!seen.has(key)) {
+        seen.set(key, lead);
+      }
+    });
+
+    return Array.from(seen.values());
+  };
+
+  // Toggle sort field/direction
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      // Toggle direction
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      // New field, default to ascending (except created_at)
+      setSortField(field);
+      setSortDirection(field === "created_at" ? "desc" : "asc");
     }
   };
 
@@ -210,6 +275,10 @@ export function LeadsDashboard({
     emailTypeFilter,
     emailEligibilityFilter,
     aiSearchedNoEmails,
+    selectedRuns,
+    hideDuplicates,
+    sortField,
+    sortDirection,
   ]);
 
   // Reset to page 1 when filters change
@@ -227,6 +296,10 @@ export function LeadsDashboard({
     emailTypeFilter,
     emailEligibilityFilter,
     aiSearchedNoEmails,
+    selectedRuns,
+    hideDuplicates,
+    sortField,
+    sortDirection,
   ]);
 
   // Toggle lead selection
@@ -586,6 +659,18 @@ export function LeadsDashboard({
           </button>
           <button
             onClick={() => {
+              setStatusFilter("new");
+              setEmailEligibilityFilter("eligible");
+              setEmailTypeFilter("personal");
+              setEmailStatusFilter("all");
+            }}
+            className="px-3 py-1 bg-emerald-600 dark:bg-emerald-700 text-white rounded text-xs font-medium hover:bg-emerald-700 dark:hover:bg-emerald-600"
+            title="Has emails, never contacted, not suppressed, not on hold"
+          >
+            🎯 Ready to Contact
+          </button>
+          <button
+            onClick={() => {
               setEmailEligibilityFilter("eligible");
               setStatusFilter("new");
             }}
@@ -648,18 +733,93 @@ export function LeadsDashboard({
               <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                 Run:
               </label>
-              <select
-                value={runFilter}
-                onChange={(e) => setRunFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm min-w-[200px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium"
-              >
-                <option value="all">All Runs ({totalCount})</option>
-                {runs.map((run) => (
-                  <option key={run.id} value={run.id}>
-                    {run.business_type} - {run.location} ({run.leadCount})
-                  </option>
-                ))}
-              </select>
+              {!showRunSelector ? (
+                <div className="flex gap-2">
+                  <select
+                    value={runFilter}
+                    onChange={(e) => setRunFilter(e.target.value)}
+                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm min-w-[200px] bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium"
+                  >
+                    <option value="all">All Runs ({totalCount})</option>
+                    {runs.map((run) => (
+                      <option key={run.id} value={run.id}>
+                        {run.business_type} - {run.location} ({run.leadCount})
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => {
+                      setShowRunSelector(true);
+                      setSelectedRuns(new Set());
+                      setRunFilter("all");
+                    }}
+                    className="px-3 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md text-sm font-medium hover:bg-blue-700 dark:hover:bg-blue-600"
+                    title="Select multiple runs and merge/deduplicate"
+                  >
+                    Multi-Select
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 p-3 border border-blue-300 dark:border-blue-600 rounded-md bg-blue-50 dark:bg-blue-900/20">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      {selectedRuns.size === 0
+                        ? "Select runs to merge:"
+                        : `${selectedRuns.size} runs selected`}
+                    </span>
+                    <div className="flex gap-2">
+                      {selectedRuns.size > 1 && (
+                        <label className="flex items-center gap-2 text-sm text-blue-900 dark:text-blue-100">
+                          <input
+                            type="checkbox"
+                            checked={hideDuplicates}
+                            onChange={(e) =>
+                              setHideDuplicates(e.target.checked)
+                            }
+                            className="h-4 w-4 text-blue-600 rounded"
+                          />
+                          Remove Duplicates
+                        </label>
+                      )}
+                      <button
+                        onClick={() => {
+                          setShowRunSelector(false);
+                          setSelectedRuns(new Set());
+                        }}
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                    {runs.map((run) => (
+                      <label
+                        key={run.id}
+                        className="flex items-start gap-2 text-sm cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-800/30 p-2 rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedRuns.has(run.id)}
+                          onChange={(e) => {
+                            const newSet = new Set(selectedRuns);
+                            if (e.target.checked) {
+                              newSet.add(run.id);
+                            } else {
+                              newSet.delete(run.id);
+                            }
+                            setSelectedRuns(newSet);
+                          }}
+                          className="h-4 w-4 text-blue-600 rounded mt-0.5"
+                        />
+                        <span className="text-blue-900 dark:text-blue-100">
+                          {run.business_type} - {run.location} ({run.leadCount})
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
@@ -912,8 +1072,18 @@ export function LeadsDashboard({
               <thead className="bg-gray-50 dark:bg-gray-900">
                 <tr>
                   <th className="w-12 px-4 py-3"></th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Company
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort("name")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Company
+                      {sortField === "name" && (
+                        <span className="text-blue-600 dark:text-blue-400">
+                          {sortDirection === "asc" ? "↑" : "↓"}
+                        </span>
+                      )}
+                    </div>
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Location
@@ -921,8 +1091,18 @@ export function LeadsDashboard({
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Industry
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Grade
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort("grade")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Grade
+                      {sortField === "grade" && (
+                        <span className="text-blue-600 dark:text-blue-400">
+                          {sortDirection === "asc" ? "↑" : "↓"}
+                        </span>
+                      )}
+                    </div>
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Emails
@@ -930,8 +1110,18 @@ export function LeadsDashboard({
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Email Status
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                    Last Sent
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
+                    onClick={() => handleSort("last_sent")}
+                  >
+                    <div className="flex items-center gap-1">
+                      Last Sent
+                      {sortField === "last_sent" && (
+                        <span className="text-blue-600 dark:text-blue-400">
+                          {sortDirection === "asc" ? "↑" : "↓"}
+                        </span>
+                      )}
+                    </div>
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                     Status

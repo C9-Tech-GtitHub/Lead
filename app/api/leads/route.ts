@@ -26,16 +26,16 @@ export async function GET(request: NextRequest) {
   const emailTypeFilter = searchParams.get("emailType") || "all"; // personal, generic, all
   const emailEligibilityFilter = searchParams.get("emailEligibility") || "all"; // eligible, not_eligible, all
   const aiSearchedNoEmails = searchParams.get("aiSearchedNoEmails") || "all"; // true, false, all
+  const sortField = searchParams.get("sortField") || "created_at";
+  const sortDirection = searchParams.get("sortDirection") || "desc";
 
   // Calculate range
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
   // Build query
-  let query = supabase
-    .from("leads")
-    .select(
-      `
+  let query = supabase.from("leads").select(
+    `
       *,
       run:runs!inner(
         id,
@@ -44,9 +44,33 @@ export async function GET(request: NextRequest) {
         created_at
       )
     `,
-      { count: "exact" },
-    )
-    .order("created_at", { ascending: false });
+    { count: "exact" },
+  );
+
+  // Apply sorting
+  const ascending = sortDirection === "asc";
+  switch (sortField) {
+    case "name":
+      query = query.order("name", { ascending });
+      break;
+    case "grade":
+      query = query.order("compatibility_grade", {
+        ascending,
+        nullsFirst: false,
+      });
+      break;
+    case "created_at":
+      query = query.order("created_at", { ascending });
+      break;
+    case "last_sent":
+      query = query.order("last_email_sent_at", {
+        ascending,
+        nullsFirst: false,
+      });
+      break;
+    default:
+      query = query.order("created_at", { ascending: false });
+  }
 
   // Apply filters
   if (statusFilter !== "all") {
@@ -64,8 +88,15 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Handle single or multiple run filtering
   if (runFilter !== "all") {
-    query = query.eq("run_id", runFilter);
+    // Support comma-separated run IDs for multi-run selection
+    if (runFilter.includes(",")) {
+      const runIds = runFilter.split(",").filter(Boolean);
+      query = query.in("run_id", runIds);
+    } else {
+      query = query.eq("run_id", runFilter);
+    }
   }
 
   if (emailStatusFilter !== "all") {

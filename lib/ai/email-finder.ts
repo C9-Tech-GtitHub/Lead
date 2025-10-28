@@ -4,6 +4,7 @@
  */
 
 import OpenAI from "openai";
+import { classifyEmail, getSimpleType } from "../email-classifier";
 
 interface EmailFinderParams {
   name: string;
@@ -19,6 +20,12 @@ interface FoundEmail {
   department?: string;
   confidence: number;
   source: string;
+  // New classification fields
+  type?: "personal" | "generic";
+  email_category?: string;
+  priority_score?: number;
+  classification_reasoning?: string;
+  is_recommended?: boolean;
 }
 
 interface EmailFinderResult {
@@ -262,6 +269,40 @@ You prioritize decision-makers and key contacts over generic emails.`,
 
     console.log(
       `[AI Email Finder] Found ${result.emails.length} email(s) for ${params.name}`,
+    );
+
+    // Classify each email using our enhanced classifier
+    result.emails = result.emails.map((email) => {
+      const classification = classifyEmail(
+        email.email,
+        email.firstName,
+        email.lastName,
+        email.position,
+      );
+
+      return {
+        ...email,
+        type: getSimpleType(classification.category),
+        email_category: classification.category,
+        priority_score: classification.priorityScore,
+        classification_reasoning: classification.reasoning,
+        is_recommended: classification.isRecommended,
+      };
+    });
+
+    // Sort by priority score (highest first)
+    result.emails.sort(
+      (a, b) => (b.priority_score || 0) - (a.priority_score || 0),
+    );
+
+    console.log(
+      `[AI Email Finder] Classified and sorted emails by priority:`,
+      result.emails.map((e) => ({
+        email: e.email,
+        category: e.email_category,
+        score: e.priority_score,
+        recommended: e.is_recommended,
+      })),
     );
 
     return result;
