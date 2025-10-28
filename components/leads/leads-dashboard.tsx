@@ -399,7 +399,7 @@ export function LeadsDashboard({
         emailStatus: emailStatusFilter,
         search: searchQuery,
         aiSearchedNoEmails: aiSearchedNoEmails,
-        limit: "1000",
+        limit: "10000",
       });
 
       const response = await fetch(`/api/leads/ids?${params}`);
@@ -408,11 +408,11 @@ export function LeadsDashboard({
       if (response.ok) {
         setSelectedLeads(new Set(data.ids));
 
-        // Only show alert if limited (over 1000)
+        // Only show alert if limited (over 10000)
         if (data.limited) {
           alert(
             `⚠️ Selected ${data.ids.length} of ${data.total} matching leads\n\n` +
-              `Limit is 1000 leads per selection.\n` +
+              `Limit is 10,000 leads per selection.\n` +
               `To select more, add filters to narrow your results.`,
           );
         }

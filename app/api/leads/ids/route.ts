@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   const emailStatusFilter = searchParams.get("emailStatus") || "all";
   const searchQuery = searchParams.get("search") || "";
   const aiSearchedNoEmails = searchParams.get("aiSearchedNoEmails") || "all";
-  const limit = parseInt(searchParams.get("limit") || "1000");
+  const limit = parseInt(searchParams.get("limit") || "10000");
 
   // Build query - only select ID to minimize data transfer
   let query = supabase.from("leads").select("id", { count: "exact" });
