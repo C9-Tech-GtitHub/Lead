@@ -230,7 +230,10 @@ export async function POST(request: Request) {
         });
 
         // Add delay between requests to avoid rate limiting (1 second)
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        // Only delay if there are more leads to process
+        if (results.processed + results.skipped < leads.length) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
       } catch (error: any) {
         results.failed++;
         results.processed++;

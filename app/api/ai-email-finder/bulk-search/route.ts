@@ -248,7 +248,10 @@ export async function POST(request: Request) {
         });
 
         // Add delay between requests to avoid overwhelming the API (2 seconds)
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Only delay if there are more leads to process
+        if (results.processed + results.skipped < leads.length) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
       } catch (error: any) {
         results.failed++;
         results.processed++;
