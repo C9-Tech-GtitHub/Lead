@@ -24,7 +24,6 @@ export default async function HomePage() {
   const { data: runs } = await supabase
     .from("runs")
     .select("id, business_type, location, created_at")
-    .neq("status", "archived") // Exclude archived (merged) runs
     .order("created_at", { ascending: false });
 
   // For each run, get the count of leads using COUNT query (bypasses row limits)

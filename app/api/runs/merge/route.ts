@@ -14,12 +14,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { runIds, newRunName, removeDuplicates = true } = await request.json();
+    const {
+      runIds,
+      newRunName,
+      removeDuplicates = true,
+    } = await request.json();
 
     if (!runIds || !Array.isArray(runIds) || runIds.length < 2) {
       return NextResponse.json(
         { error: "At least 2 runs required to merge" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -35,38 +39,65 @@ export async function POST(request: NextRequest) {
     if (runsError || !runsToMerge || runsToMerge.length === 0) {
       return NextResponse.json(
         { error: "Failed to fetch runs" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     console.log(`[Merge Runs] Found ${runsToMerge.length} runs to merge`);
 
     // Calculate combined stats
-    const totalLeads = runsToMerge.reduce((sum, run) => sum + (run.total_leads || 0), 0);
-    const gradeACount = runsToMerge.reduce((sum, run) => sum + (run.grade_a_count || 0), 0);
-    const gradeBCount = runsToMerge.reduce((sum, run) => sum + (run.grade_b_count || 0), 0);
-    const gradeCCount = runsToMerge.reduce((sum, run) => sum + (run.grade_c_count || 0), 0);
-    const gradeDCount = runsToMerge.reduce((sum, run) => sum + (run.grade_d_count || 0), 0);
-    const gradeFCount = runsToMerge.reduce((sum, run) => sum + (run.grade_f_count || 0), 0);
+    const totalLeads = runsToMerge.reduce(
+      (sum, run) => sum + (run.total_leads || 0),
+      0,
+    );
+    const gradeACount = runsToMerge.reduce(
+      (sum, run) => sum + (run.grade_a_count || 0),
+      0,
+    );
+    const gradeBCount = runsToMerge.reduce(
+      (sum, run) => sum + (run.grade_b_count || 0),
+      0,
+    );
+    const gradeCCount = runsToMerge.reduce(
+      (sum, run) => sum + (run.grade_c_count || 0),
+      0,
+    );
+    const gradeDCount = runsToMerge.reduce(
+      (sum, run) => sum + (run.grade_d_count || 0),
+      0,
+    );
+    const gradeFCount = runsToMerge.reduce(
+      (sum, run) => sum + (run.grade_f_count || 0),
+      0,
+    );
 
     // Combine business types and locations
-    const businessTypes = [...new Set(
-      runsToMerge.flatMap(run => run.business_types || [run.business_type]).filter(Boolean)
-    )];
-    const locations = [...new Set(runsToMerge.map(run => run.location).filter(Boolean))];
+    const businessTypes = [
+      ...new Set(
+        runsToMerge
+          .flatMap((run) => run.business_types || [run.business_type])
+          .filter(Boolean),
+      ),
+    ];
+    const locations = [
+      ...new Set(runsToMerge.map((run) => run.location).filter(Boolean)),
+    ];
 
-    // Create merged run name
-    const mergedRunName = newRunName ||
-      `Merged: ${businessTypes.join(", ")} - ${locations.join(", ")}`;
+    // Use first business type and location for clean display name
+    const displayBusinessType = businessTypes[0] || "Merged Run";
+    const displayLocation =
+      locations.length > 1
+        ? `${locations[0]} +${locations.length - 1} more`
+        : locations[0] || "Multiple Locations";
 
     // Create new merged run
     const { data: newRun, error: createError } = await supabase
       .from("runs")
       .insert({
         user_id: user.id,
-        business_type: businessTypes[0] || "Merged Run",
+        business_type: displayBusinessType,
         business_types: businessTypes,
-        location: locations[0] || "Multiple Locations",
+        location: displayLocation,
         target_count: totalLeads,
         status: "completed",
         progress: 100,
@@ -87,7 +118,7 @@ export async function POST(request: NextRequest) {
       console.error("[Merge Runs] Failed to create merged run:", createError);
       return NextResponse.json(
         { error: "Failed to create merged run" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
@@ -103,11 +134,13 @@ export async function POST(request: NextRequest) {
       console.error("[Merge Runs] Failed to fetch leads:", leadsError);
       return NextResponse.json(
         { error: "Failed to fetch leads" },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
-    console.log(`[Merge Runs] Found ${allLeads.length} total leads across runs`);
+    console.log(
+      `[Merge Runs] Found ${allLeads.length} total leads across runs`,
+    );
 
     let leadsToKeep = allLeads;
     let duplicatesRemoved = 0;
@@ -142,7 +175,13 @@ export async function POST(request: NextRequest) {
           const existing = seen.get(key);
 
           // Grade priority: A > B > C > D > F > null
-          const gradeOrder: Record<string, number> = { A: 5, B: 4, C: 3, D: 2, F: 1 };
+          const gradeOrder: Record<string, number> = {
+            A: 5,
+            B: 4,
+            C: 3,
+            D: 2,
+            F: 1,
+          };
           const existingGrade = gradeOrder[existing.compatibility_grade] || 0;
           const newGrade = gradeOrder[lead.compatibility_grade] || 0;
 
@@ -160,11 +199,13 @@ export async function POST(request: NextRequest) {
       leadsToKeep = Array.from(seen.values());
       duplicatesRemoved = allLeads.length - leadsToKeep.length;
 
-      console.log(`[Merge Runs] Removed ${duplicatesRemoved} duplicates (${allLeads.length} -> ${leadsToKeep.length})`);
+      console.log(
+        `[Merge Runs] Removed ${duplicatesRemoved} duplicates (${allLeads.length} -> ${leadsToKeep.length})`,
+      );
     }
 
     // Update all kept leads to point to new run
-    const leadIds = leadsToKeep.map(l => l.id);
+    const leadIds = leadsToKeep.map((l) => l.id);
 
     if (leadIds.length > 0) {
       const { error: updateError } = await supabase
@@ -178,7 +219,7 @@ export async function POST(request: NextRequest) {
         await supabase.from("runs").delete().eq("id", newRun.id);
         return NextResponse.json(
           { error: "Failed to reassign leads to merged run" },
-          { status: 500 }
+          { status: 500 },
         );
       }
 
@@ -186,11 +227,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate actual grade counts from kept leads
-    const actualGradeA = leadsToKeep.filter(l => l.compatibility_grade === "A").length;
-    const actualGradeB = leadsToKeep.filter(l => l.compatibility_grade === "B").length;
-    const actualGradeC = leadsToKeep.filter(l => l.compatibility_grade === "C").length;
-    const actualGradeD = leadsToKeep.filter(l => l.compatibility_grade === "D").length;
-    const actualGradeF = leadsToKeep.filter(l => l.compatibility_grade === "F").length;
+    const actualGradeA = leadsToKeep.filter(
+      (l) => l.compatibility_grade === "A",
+    ).length;
+    const actualGradeB = leadsToKeep.filter(
+      (l) => l.compatibility_grade === "B",
+    ).length;
+    const actualGradeC = leadsToKeep.filter(
+      (l) => l.compatibility_grade === "C",
+    ).length;
+    const actualGradeD = leadsToKeep.filter(
+      (l) => l.compatibility_grade === "D",
+    ).length;
+    const actualGradeF = leadsToKeep.filter(
+      (l) => l.compatibility_grade === "F",
+    ).length;
 
     // Update merged run stats
     const { error: statsError } = await supabase
@@ -212,8 +263,8 @@ export async function POST(request: NextRequest) {
     // Delete duplicate leads if any were removed
     if (duplicatesRemoved > 0) {
       const duplicateIds = allLeads
-        .filter(lead => !leadIds.includes(lead.id))
-        .map(lead => lead.id);
+        .filter((lead) => !leadIds.includes(lead.id))
+        .map((lead) => lead.id);
 
       if (duplicateIds.length > 0) {
         const { error: deleteError } = await supabase
@@ -222,37 +273,39 @@ export async function POST(request: NextRequest) {
           .in("id", duplicateIds);
 
         if (deleteError) {
-          console.error("[Merge Runs] Failed to delete duplicates:", deleteError);
+          console.error(
+            "[Merge Runs] Failed to delete duplicates:",
+            deleteError,
+          );
         } else {
-          console.log(`[Merge Runs] Deleted ${duplicateIds.length} duplicate leads`);
+          console.log(
+            `[Merge Runs] Deleted ${duplicateIds.length} duplicate leads`,
+          );
         }
       }
     }
 
-    // Archive or delete old runs (optional - we'll archive by marking them)
-    const { error: archiveError } = await supabase
+    // Delete old runs completely from database
+    const { error: deleteRunsError } = await supabase
       .from("runs")
-      .update({
-        status: "archived",
-        // Store merge info in a new field if you add it, or just leave as archived
-      })
+      .delete()
       .in("id", runIds);
 
-    if (archiveError) {
-      console.error("[Merge Runs] Failed to archive old runs:", archiveError);
+    if (deleteRunsError) {
+      console.error("[Merge Runs] Failed to delete old runs:", deleteRunsError);
     } else {
-      console.log(`[Merge Runs] Archived ${runIds.length} old runs`);
+      console.log(`[Merge Runs] Deleted ${runIds.length} old runs`);
     }
 
     return NextResponse.json({
       success: true,
       mergedRun: {
         id: newRun.id,
-        name: mergedRunName,
+        name: `${displayBusinessType} - ${displayLocation}`,
         totalLeads: leadsToKeep.length,
         duplicatesRemoved,
         originalLeadCount: allLeads.length,
-        sourceRuns: runsToMerge.map(r => ({
+        sourceRuns: runsToMerge.map((r) => ({
           id: r.id,
           name: `${r.business_type} - ${r.location}`,
           leadCount: r.total_leads,
@@ -263,7 +316,7 @@ export async function POST(request: NextRequest) {
     console.error("[Merge Runs] Error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
