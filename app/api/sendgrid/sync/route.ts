@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error:
-          "SendGrid API key is not configured. Please contact your administrator to add SENDGRID_API_KEY to environment variables.",
+          "SendGrid API key is not configured. Add SENDGRID_API_KEY to Vercel environment variables (Project Settings → Environment Variables), then redeploy.",
         needsConfiguration: true,
       },
       { status: 503 }, // Service Unavailable
