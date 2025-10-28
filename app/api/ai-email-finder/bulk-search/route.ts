@@ -66,20 +66,18 @@ export async function POST(request: Request) {
       details: [] as any[],
     };
 
-    // Process each lead
-    for (const lead of leads) {
+    // Process a single lead
+    const processLead = async (lead: any) => {
       let domain = lead.website;
 
       // Skip if no domain
       if (!domain) {
-        results.skipped++;
-        results.details.push({
+        return {
           leadId: lead.id,
           leadName: lead.name,
           status: "skipped",
           reason: "No website domain",
-        });
-        continue;
+        };
       }
 
       // Skip if already searched or has emails and onlyMissing is true
@@ -88,14 +86,12 @@ export async function POST(request: Request) {
 
         // Skip if lead already has emails
         if (emailCount > 0) {
-          results.skipped++;
-          results.details.push({
+          return {
             leadId: lead.id,
             leadName: lead.name,
             status: "skipped",
             reason: `Already has ${emailCount} email${emailCount !== 1 ? "s" : ""}`,
-          });
-          continue;
+          };
         }
 
         // Also skip if already searched (but found no emails)
@@ -105,14 +101,12 @@ export async function POST(request: Request) {
         if (lead.ai_email_searched_at) searchedWith.push("AI Search");
 
         if (searchedWith.length > 0) {
-          results.skipped++;
-          results.details.push({
+          return {
             leadId: lead.id,
             leadName: lead.name,
             status: "skipped",
             reason: `Already searched with ${searchedWith.join(", ")} (no emails found)`,
-          });
-          continue;
+          };
         }
       }
 
@@ -135,15 +129,12 @@ export async function POST(request: Request) {
             `[AI Email Finder] AI search failed for ${lead.name}:`,
             aiError.message,
           );
-          results.failed++;
-          results.processed++;
-          results.details.push({
+          return {
             leadId: lead.id,
             leadName: lead.name,
             status: "failed",
             reason: `AI search error: ${aiError.message}`,
-          });
-          continue;
+          };
         }
 
         // Update lead with AI search metadata
@@ -195,10 +186,6 @@ export async function POST(request: Request) {
           console.log(
             `[AI Email Finder] Inserting ${emailRecords.length} emails for lead ${lead.id}`,
           );
-          console.log(
-            "[AI Email Finder] Email records:",
-            JSON.stringify(emailRecords, null, 2),
-          );
 
           const { error: insertError } = await supabase
             .from("lead_emails")
@@ -209,24 +196,13 @@ export async function POST(request: Request) {
               "[AI Email Finder] Error inserting emails:",
               insertError,
             );
-            console.error("[AI Email Finder] Error code:", insertError.code);
-            console.error(
-              "[AI Email Finder] Error message:",
-              insertError.message,
-            );
-            console.error(
-              "[AI Email Finder] Error details:",
-              insertError.details,
-            );
-            results.failed++;
-            results.details.push({
+            return {
               leadId: lead.id,
               leadName: lead.name,
               status: "failed",
               reason: `Database error: ${insertError.message}`,
               emailsFound: aiResult.emails.length,
-            });
-            continue;
+            };
           }
 
           console.log(
@@ -234,9 +210,7 @@ export async function POST(request: Request) {
           );
         }
 
-        results.successful++;
-        results.processed++;
-        results.details.push({
+        return {
           leadId: lead.id,
           leadName: lead.name,
           domain: domain,
@@ -245,23 +219,44 @@ export async function POST(request: Request) {
           organization: aiResult.organization,
           pattern: aiResult.emailPattern,
           searchSummary: aiResult.searchSummary,
-        });
-
-        // Add delay between requests to avoid overwhelming the API (2 seconds)
-        // Only delay if there are more leads to process
-        if (results.processed + results.skipped < leads.length) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
+        };
       } catch (error: any) {
-        results.failed++;
-        results.processed++;
-        results.details.push({
+        return {
           leadId: lead.id,
           leadName: lead.name,
           status: "failed",
           reason: error.message,
-        });
+        };
       }
+    };
+
+    // Process leads in parallel with concurrency limit
+    const CONCURRENCY_LIMIT = 10; // Process 10 leads at a time
+    const allResults: any[] = [];
+
+    for (let i = 0; i < leads.length; i += CONCURRENCY_LIMIT) {
+      const batch = leads.slice(i, i + CONCURRENCY_LIMIT);
+      const batchResults = await Promise.all(batch.map(processLead));
+
+      for (const result of batchResults) {
+        allResults.push(result);
+
+        if (result.status === "skipped") {
+          results.skipped++;
+        } else if (result.status === "failed") {
+          results.failed++;
+          results.processed++;
+        } else if (result.status === "success") {
+          results.successful++;
+          results.processed++;
+        }
+
+        results.details.push(result);
+      }
+
+      console.log(
+        `[AI Email Finder Bulk] Progress: ${allResults.length}/${leads.length} (${Math.round((allResults.length / leads.length) * 100)}%)`,
+      );
     }
 
     return NextResponse.json({
