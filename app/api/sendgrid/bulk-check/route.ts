@@ -191,10 +191,10 @@ export async function POST(request: NextRequest) {
         results.blocked++;
         // Blocked - determine specific reason
         const hasSuppressionIssue = leadResult.issues.some(
-          (issue) => issue.type === "suppressed",
+          (issue: any) => issue.type === "suppressed",
         );
         const hasCadenceIssue = leadResult.issues.some(
-          (issue) => issue.type === "recent_contact",
+          (issue: any) => issue.type === "recent_contact",
         );
 
         if (hasSuppressionIssue) {
