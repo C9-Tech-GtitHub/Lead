@@ -378,6 +378,19 @@ export function LeadsDashboard({
 
   // Select all matching current filters (not just current page)
   const selectAllMatching = async () => {
+    // Safety check for large selections
+    if (totalCount > 500) {
+      const confirmed = confirm(
+        `⚠️ This will select ${totalCount} leads!\n\n` +
+          `Large selections can be slow and may cause issues.\n\n` +
+          `Consider:\n` +
+          `• Adding more filters to narrow results\n` +
+          `• Selecting per page instead\n\n` +
+          `Continue anyway?`,
+      );
+      if (!confirmed) return;
+    }
+
     setIsLoading(true);
     try {
       // Determine run filter value
@@ -386,9 +399,12 @@ export function LeadsDashboard({
         runFilterValue = Array.from(selectedRuns).join(",");
       }
 
+      // Cap at 1000 to avoid Supabase row limit issues
+      const maxLeads = Math.min(totalCount, 1000);
+
       const params = new URLSearchParams({
         page: "1",
-        pageSize: "10000", // Get up to 10k matching leads
+        pageSize: maxLeads.toString(),
         status: statusFilter,
         grade: gradeFilter,
         gradeRange: gradeRangeFilter,
@@ -408,7 +424,18 @@ export function LeadsDashboard({
       if (response.ok) {
         const matchingIds = data.leads.map((l: any) => l.id);
         setSelectedLeads(new Set(matchingIds));
-        alert(`Selected ${matchingIds.length} leads matching current filters`);
+
+        if (totalCount > 1000) {
+          alert(
+            `⚠️ Selected first 1000 of ${totalCount} matching leads\n\n` +
+              `Supabase has a 1000 row limit per query.\n` +
+              `To select more, add filters to narrow your results.`,
+          );
+        } else {
+          alert(
+            `✓ Selected ${matchingIds.length} leads matching current filters`,
+          );
+        }
       }
     } catch (error) {
       console.error("Error selecting all matching:", error);
