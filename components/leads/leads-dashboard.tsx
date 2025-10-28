@@ -767,19 +767,44 @@ export function LeadsDashboard({
                         ? "Select runs to merge:"
                         : `${selectedRuns.size} runs selected`}
                     </span>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       {selectedRuns.size > 1 && (
-                        <label className="flex items-center gap-2 text-sm text-blue-900 dark:text-blue-100">
-                          <input
-                            type="checkbox"
-                            checked={hideDuplicates}
-                            onChange={(e) =>
-                              setHideDuplicates(e.target.checked)
-                            }
-                            className="h-4 w-4 text-blue-600 rounded"
-                          />
-                          Remove Duplicates
-                        </label>
+                        <>
+                          <label className="flex items-center gap-2 text-sm text-blue-900 dark:text-blue-100">
+                            <input
+                              type="checkbox"
+                              checked={hideDuplicates}
+                              onChange={(e) =>
+                                setHideDuplicates(e.target.checked)
+                              }
+                              className="h-4 w-4 text-blue-600 rounded"
+                            />
+                            Remove Duplicates
+                          </label>
+                          <button
+                            onClick={async () => {
+                              // Export merged runs
+                              const runNames = runs
+                                .filter((r) => selectedRuns.has(r.id))
+                                .map(
+                                  (r) => `${r.business_type} - ${r.location}`,
+                                )
+                                .join(", ");
+
+                              const confirmed = confirm(
+                                `Export ${totalCount} leads from:\n${runNames}\n\n${hideDuplicates ? "Duplicates will be removed." : "Duplicates will be included."}`,
+                              );
+
+                              if (confirmed) {
+                                await handleExport();
+                              }
+                            }}
+                            className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700"
+                            title="Export merged runs to CSV"
+                          >
+                            🔗 Merge & Export
+                          </button>
+                        </>
                       )}
                       <button
                         onClick={() => {
