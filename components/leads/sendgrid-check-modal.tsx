@@ -35,6 +35,7 @@ interface CheckResult {
     reason?: string;
   }>;
   status: "safe" | "warning" | "blocked";
+  statusUpdated?: string;
 }
 
 export default function SendGridCheckModal({
@@ -306,6 +307,14 @@ export default function SendGridCheckModal({
                             {detail.domain && (
                               <div className="text-sm text-gray-600 mt-0.5">
                                 {detail.domain}
+                              </div>
+                            )}
+
+                            {/* Status Update Indicator */}
+                            {detail.statusUpdated && (
+                              <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                <CheckCircle className="w-3 h-3" />
+                                Email status updated to: {detail.statusUpdated}
                               </div>
                             )}
 

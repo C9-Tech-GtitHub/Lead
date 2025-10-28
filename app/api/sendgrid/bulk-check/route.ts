@@ -176,13 +176,59 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Determine final status
+      // Determine final status and update lead email_status
+      let newEmailStatus = null;
+
       if (leadResult.status === "safe" && leadResult.issues.length === 0) {
         results.safe++;
+        // Safe leads - set status to indicate they can be contacted
+        newEmailStatus = "verified";
       } else if (leadResult.status === "warning") {
         results.warnings++;
+        // Warning - previously sent or minor issues
+        newEmailStatus = "previously_sent";
       } else if (leadResult.status === "blocked") {
         results.blocked++;
+        // Blocked - determine specific reason
+        const hasSuppressionIssue = leadResult.issues.some(
+          (issue) => issue.type === "suppressed",
+        );
+        const hasCadenceIssue = leadResult.issues.some(
+          (issue) => issue.type === "recent_contact",
+        );
+
+        if (hasSuppressionIssue) {
+          newEmailStatus = "suppressed";
+        } else if (hasCadenceIssue) {
+          newEmailStatus = "cadence_restricted";
+        } else {
+          newEmailStatus = "unavailable";
+        }
+      }
+
+      // Update the lead's email_status in the database
+      if (newEmailStatus && lead.email_status !== newEmailStatus) {
+        const { error: updateError } = await supabase
+          .from("leads")
+          .update({ email_status: newEmailStatus })
+          .eq("id", lead.id);
+
+        if (updateError) {
+          console.error(
+            `[Bulk SendGrid Check] Failed to update email_status for lead ${lead.id}:`,
+            updateError,
+          );
+          leadResult.issues.push({
+            type: "update_failed",
+            severity: "warning",
+            message: `Failed to update email status: ${updateError.message}`,
+          });
+        } else {
+          console.log(
+            `[Bulk SendGrid Check] Updated email_status for ${lead.name} from "${lead.email_status || "null"}" to "${newEmailStatus}"`,
+          );
+          leadResult.statusUpdated = newEmailStatus;
+        }
       }
 
       results.details.push(leadResult);
