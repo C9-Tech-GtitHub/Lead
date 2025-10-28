@@ -5,9 +5,6 @@
 -- to help select the best email for maximum reply likelihood
 -- ============================================
 
--- Enable UUID extension if not already enabled
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Add new columns to lead_emails table
 ALTER TABLE lead_emails
   ADD COLUMN IF NOT EXISTS email_category TEXT
@@ -56,7 +53,7 @@ COMMENT ON COLUMN lead_emails.is_recommended IS 'Whether this email is recommend
 
 -- Create table to track domain contact history
 CREATE TABLE IF NOT EXISTS domain_contact_history (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   domain TEXT NOT NULL,
   email_sent TEXT NOT NULL, -- The specific email address we sent to
