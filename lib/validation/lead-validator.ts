@@ -31,12 +31,16 @@ const INVALID_WEBSITE_PATTERNS = [
   "maps.google.com",
   "goo.gl/maps",
   "maps.app.goo.gl",
+  "waze.com",
   "yelp.com",
   "yellowpages.com",
   "yellowpages.com.au",
+  "whitepages.com.au",
+  "whitepages.com",
   "truelocal.com.au",
   "localsearch.com.au",
   "hotfrog.com.au",
+  "hipages.com.au",
   "tripadvisor.com",
 
   // Other platforms

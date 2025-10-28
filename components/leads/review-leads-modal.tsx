@@ -115,7 +115,8 @@ export default function ReviewLeadsModal({
                 Review Leads
               </h2>
               <p className="text-sm text-gray-500">
-                Scan leads for invalid websites (social media, directories, etc.)
+                Scan leads for invalid websites (social media, directories,
+                etc.)
               </p>
             </div>
           </div>
@@ -141,8 +142,8 @@ export default function ReviewLeadsModal({
                     YouTube, Twitter, LinkedIn, TikTok
                   </li>
                   <li>
-                    • <strong>Directory Listings:</strong> Google Maps, Yelp,
-                    Yellow Pages, TrueLocal
+                    • <strong>Directory Listings:</strong> Google Maps, Waze,
+                    Yelp, Yellow Pages, White Pages, TrueLocal, HiPages
                   </li>
                   <li>
                     • <strong>Invalid Domains:</strong> Missing or malformed
