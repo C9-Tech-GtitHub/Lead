@@ -5,6 +5,9 @@
 -- to help select the best email for maximum reply likelihood
 -- ============================================
 
+-- Enable UUID extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 -- Add new columns to lead_emails table
 ALTER TABLE lead_emails
   ADD COLUMN IF NOT EXISTS email_category TEXT
