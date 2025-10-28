@@ -376,9 +376,46 @@ export function LeadsDashboard({
     setSelectedLeads(new Set(leads.map((l) => l.id)));
   };
 
-  // Select all on current page that have a website domain
-  const selectAllWithDomain = () => {
-    setSelectedLeads(new Set(leads.filter((l) => l.website).map((l) => l.id)));
+  // Select all matching current filters (not just current page)
+  const selectAllMatching = async () => {
+    setIsLoading(true);
+    try {
+      // Determine run filter value
+      let runFilterValue = runFilter;
+      if (selectedRuns.size > 0) {
+        runFilterValue = Array.from(selectedRuns).join(",");
+      }
+
+      const params = new URLSearchParams({
+        page: "1",
+        pageSize: "10000", // Get up to 10k matching leads
+        status: statusFilter,
+        grade: gradeFilter,
+        gradeRange: gradeRangeFilter,
+        run: runFilterValue,
+        emailStatus: emailStatusFilter,
+        search: searchQuery,
+        emailType: emailTypeFilter,
+        emailEligibility: emailEligibilityFilter,
+        aiSearchedNoEmails: aiSearchedNoEmails,
+        sortField: sortField,
+        sortDirection: sortDirection,
+      });
+
+      const response = await fetch(`/api/leads?${params}`);
+      const data = await response.json();
+
+      if (response.ok) {
+        const matchingIds = data.leads.map((l: any) => l.id);
+        setSelectedLeads(new Set(matchingIds));
+        alert(`Selected ${matchingIds.length} leads matching current filters`);
+      }
+    } catch (error) {
+      console.error("Error selecting all matching:", error);
+      alert("Failed to select all matching leads");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Clear selection
@@ -1098,10 +1135,13 @@ export function LeadsDashboard({
               Select all {leads.length} on this page
             </button>
             <button
-              onClick={selectAllWithDomain}
-              className="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline"
+              onClick={selectAllMatching}
+              disabled={isLoading}
+              className="text-sm text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 underline disabled:text-gray-400 disabled:cursor-not-allowed"
             >
-              Select all with website ({leads.filter((l) => l.website).length})
+              {isLoading
+                ? "Loading..."
+                : `Select all ${totalCount} matching current filters`}
             </button>
           </div>
         )}
