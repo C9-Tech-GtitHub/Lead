@@ -205,19 +205,88 @@ async function scrapeWithFirecrawl(
 }
 
 /**
+ * Convert HTML to clean text format
+ */
+function htmlToText(html: string): string {
+  // Basic HTML to text conversion
+  // Remove script and style tags
+  let text = html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
+    // Remove HTML tags
+    .replace(/<[^>]+>/g, " ")
+    // Decode common HTML entities
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&apos;/g, "'")
+    // Clean up whitespace
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Limit content to prevent overwhelming the AI
+  if (text.length > 10000) {
+    text = text.substring(0, 10000) + "...";
+  }
+
+  return text;
+}
+
+/**
  * Fallback scraping method when Firecrawl is not available
- * Uses a simple fetch to get basic content
+ * Uses ScrapingDog API as backup
  */
 async function scrapeWithFallback(url: string): Promise<string> {
+  const scrapingDogKey = process.env.SCRAPINGDOG_API_KEY;
+
+  // Try ScrapingDog first if API key is available
+  if (scrapingDogKey) {
+    try {
+      console.log(`[Website Scraper] Using ScrapingDog fallback for: ${url}`);
+
+      const scrapingDogUrl = `https://api.scrapingdog.com/scrape?api_key=${scrapingDogKey}&url=${encodeURIComponent(url)}&dynamic=false`;
+
+      const response = await fetch(scrapingDogUrl, {
+        signal: AbortSignal.timeout(30000), // 30 second timeout
+      });
+
+      if (!response.ok) {
+        throw new Error(`ScrapingDog API error: ${response.status}`);
+      }
+
+      const html = await response.text();
+
+      // Convert HTML to markdown-like text
+      const text = htmlToText(html);
+
+      if (text.length >= 100) {
+        console.log(
+          `[Website Scraper] ScrapingDog fallback successful (${text.length} chars)`,
+        );
+        return text;
+      }
+
+      throw new Error("Insufficient content from ScrapingDog");
+    } catch (scrapingDogError) {
+      console.warn(
+        "[Website Scraper] ScrapingDog fallback failed, trying direct fetch:",
+        scrapingDogError,
+      );
+    }
+  }
+
+  // Last resort: direct fetch
   try {
-    console.log(`[Website Scraper] Using fallback method for: ${url}`);
+    console.log(`[Website Scraper] Using direct fetch for: ${url}`);
 
     const response = await fetch(url, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
       },
-      // Add a timeout
       signal: AbortSignal.timeout(10000),
     });
 
@@ -226,28 +295,7 @@ async function scrapeWithFallback(url: string): Promise<string> {
     }
 
     const html = await response.text();
-
-    // Basic HTML to text conversion
-    // Remove script and style tags
-    let text = html
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, "")
-      // Remove HTML tags
-      .replace(/<[^>]+>/g, " ")
-      // Decode common HTML entities
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      // Clean up whitespace
-      .replace(/\s+/g, " ")
-      .trim();
-
-    // Limit content to prevent overwhelming the AI
-    if (text.length > 10000) {
-      text = text.substring(0, 10000) + "...";
-    }
+    const text = htmlToText(html);
 
     if (text.length < 100) {
       throw new Error("Insufficient content retrieved from fallback method");

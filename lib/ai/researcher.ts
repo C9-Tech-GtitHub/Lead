@@ -9,6 +9,7 @@ import OpenAI from "openai";
 import {
   validateLead,
   isValidBusinessWebsite,
+  detectExistingSEO,
 } from "../validation/lead-validator";
 
 interface ResearchLeadParams {
@@ -38,6 +39,9 @@ interface LeadAnalysis {
   suggestedHooks?: string[] | null;
   painPoints?: string[] | null;
   opportunities?: string[] | null;
+  hasExistingSEO?: boolean;
+  seoProvider?: string;
+  seoEvidence?: string;
 }
 
 // Lazy initialization of OpenAI client to avoid build-time errors
@@ -98,6 +102,14 @@ export async function deepResearchLead(
       };
     }
 
+    // Check for existing SEO provider
+    const seoDetection = detectExistingSEO(params.websiteContent);
+    if (seoDetection.hasExistingSEO) {
+      console.log(
+        `[DEEP AI Researcher] Detected existing SEO provider for ${params.name}: ${seoDetection.provider}`,
+      );
+    }
+
     const openai = getOpenAIClient();
 
     // Construct the analysis prompt with all available data
@@ -135,8 +147,15 @@ export async function deepResearchLead(
     // Parse the structured response
     const analysis = parseGPT5Response(content);
 
+    // Add SEO detection results to analysis
+    if (seoDetection.hasExistingSEO) {
+      analysis.hasExistingSEO = true;
+      analysis.seoProvider = seoDetection.provider;
+      analysis.seoEvidence = seoDetection.evidence;
+    }
+
     console.log(
-      `[DEEP AI Researcher] Analysis complete for ${params.name} - Grade: ${analysis.grade}`,
+      `[DEEP AI Researcher] Analysis complete for ${params.name} - Grade: ${analysis.grade}${seoDetection.hasExistingSEO ? ` (Has existing SEO: ${seoDetection.provider})` : ""}`,
     );
 
     return analysis;

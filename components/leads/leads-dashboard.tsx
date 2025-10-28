@@ -382,19 +382,6 @@ export function LeadsDashboard({
 
   // Select all matching current filters (not just current page)
   const selectAllMatching = async () => {
-    // Safety check for large selections
-    if (totalCount > 500) {
-      const confirmed = confirm(
-        `⚠️ This will select ${totalCount} leads!\n\n` +
-          `Large selections can be slow and may cause issues.\n\n` +
-          `Consider:\n` +
-          `• Adding more filters to narrow results\n` +
-          `• Selecting per page instead\n\n` +
-          `Continue anyway?`,
-      );
-      if (!confirmed) return;
-    }
-
     setIsLoading(true);
     try {
       // Determine run filter value
@@ -403,43 +390,35 @@ export function LeadsDashboard({
         runFilterValue = Array.from(selectedRuns).join(",");
       }
 
-      // Cap at 1000 to avoid Supabase row limit issues
-      const maxLeads = Math.min(totalCount, 1000);
-
+      // Use lightweight IDs endpoint
       const params = new URLSearchParams({
-        page: "1",
-        pageSize: maxLeads.toString(),
         status: statusFilter,
         grade: gradeFilter,
         gradeRange: gradeRangeFilter,
         run: runFilterValue,
         emailStatus: emailStatusFilter,
         search: searchQuery,
-        emailType: emailTypeFilter,
-        emailEligibility: emailEligibilityFilter,
         aiSearchedNoEmails: aiSearchedNoEmails,
-        sortField: sortField,
-        sortDirection: sortDirection,
+        limit: "1000",
       });
 
-      const response = await fetch(`/api/leads?${params}`);
+      const response = await fetch(`/api/leads/ids?${params}`);
       const data = await response.json();
 
       if (response.ok) {
-        const matchingIds = data.leads.map((l: any) => l.id);
-        setSelectedLeads(new Set(matchingIds));
+        setSelectedLeads(new Set(data.ids));
 
-        if (totalCount > 1000) {
+        if (data.limited) {
           alert(
-            `⚠️ Selected first 1000 of ${totalCount} matching leads\n\n` +
-              `Supabase has a 1000 row limit per query.\n` +
+            `⚠️ Selected ${data.ids.length} of ${data.total} matching leads\n\n` +
+              `Limit is 1000 leads per selection.\n` +
               `To select more, add filters to narrow your results.`,
           );
         } else {
-          alert(
-            `✓ Selected ${matchingIds.length} leads matching current filters`,
-          );
+          alert(`✓ Selected ${data.ids.length} leads matching current filters`);
         }
+      } else {
+        throw new Error(data.error || "Failed to fetch lead IDs");
       }
     } catch (error) {
       console.error("Error selecting all matching:", error);
@@ -819,23 +798,7 @@ export function LeadsDashboard({
           >
             🎯 Ready to Contact
           </button>
-          <button
-            onClick={() => {
-              setEmailEligibilityFilter("eligible");
-              setStatusFilter("new");
-            }}
-            className="px-3 py-1 bg-blue-600 dark:bg-blue-700 text-white rounded text-xs font-medium hover:bg-blue-700 dark:hover:bg-blue-600"
-          >
-            📧 Never Sent
-          </button>
-          <button
-            onClick={() => {
-              setEmailTypeFilter("personal");
-            }}
-            className="px-3 py-1 bg-purple-600 dark:bg-purple-700 text-white rounded text-xs font-medium hover:bg-purple-700 dark:hover:bg-purple-600"
-          >
-            👤 Non-Generic Emails
-          </button>
+
           <button
             onClick={() => {
               setGradeFilter("all");
@@ -1132,14 +1095,7 @@ export function LeadsDashboard({
             >
               🛡️ Check SendGrid ({selectedLeads.size})
             </button>
-            <button
-              onClick={handleSendGridSync}
-              disabled={isSyncing}
-              className="px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md text-sm font-medium hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
-              title="Sync bounce and unsubscribe data from SendGrid"
-            >
-              {isSyncing ? "Syncing..." : "🔄 Sync SendGrid"}
-            </button>
+
             <button
               onClick={handleExport}
               disabled={totalCount === 0 || isExporting}
