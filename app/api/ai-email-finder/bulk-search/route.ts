@@ -36,12 +36,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch leads with their domains (no user filtering - all users can access all leads)
+    // Fetch leads with their domains and email counts (no user filtering - all users can access all leads)
     console.log("[AI Email Finder Bulk] Querying leads");
     const { data: leads, error: leadsError } = await supabase
       .from("leads")
       .select(
-        "id, name, website, hunter_io_searched_at, tomba_searched_at, ai_email_searched_at",
+        "id, name, website, hunter_io_searched_at, tomba_searched_at, ai_email_searched_at, lead_emails(count)",
       )
       .in("id", leadIds);
 
@@ -82,8 +82,23 @@ export async function POST(request: Request) {
         continue;
       }
 
-      // Skip if already searched and onlyMissing is true
+      // Skip if already searched or has emails and onlyMissing is true
       if (onlyMissing) {
+        const emailCount = (lead as any).lead_emails?.[0]?.count || 0;
+
+        // Skip if lead already has emails
+        if (emailCount > 0) {
+          results.skipped++;
+          results.details.push({
+            leadId: lead.id,
+            leadName: lead.name,
+            status: "skipped",
+            reason: `Already has ${emailCount} email${emailCount !== 1 ? "s" : ""}`,
+          });
+          continue;
+        }
+
+        // Also skip if already searched (but found no emails)
         const searchedWith = [];
         if (lead.hunter_io_searched_at) searchedWith.push("Hunter.io");
         if (lead.tomba_searched_at) searchedWith.push("Tomba.io");
@@ -95,7 +110,7 @@ export async function POST(request: Request) {
             leadId: lead.id,
             leadName: lead.name,
             status: "skipped",
-            reason: `Already searched with ${searchedWith.join(", ")}`,
+            reason: `Already searched with ${searchedWith.join(", ")} (no emails found)`,
           });
           continue;
         }
