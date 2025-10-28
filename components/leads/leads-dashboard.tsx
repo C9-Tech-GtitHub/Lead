@@ -408,15 +408,15 @@ export function LeadsDashboard({
       if (response.ok) {
         setSelectedLeads(new Set(data.ids));
 
+        // Only show alert if limited (over 1000)
         if (data.limited) {
           alert(
             `⚠️ Selected ${data.ids.length} of ${data.total} matching leads\n\n` +
               `Limit is 1000 leads per selection.\n` +
               `To select more, add filters to narrow your results.`,
           );
-        } else {
-          alert(`✓ Selected ${data.ids.length} leads matching current filters`);
         }
+        // No success alert - silent selection
       } else {
         throw new Error(data.error || "Failed to fetch lead IDs");
       }
