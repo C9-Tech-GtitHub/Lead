@@ -39,6 +39,7 @@ export default function BulkEmailFinderModal({
   const [provider, setProvider] = useState<EmailProvider>("hunter");
   const [progress, setProgress] = useState(0);
   const [estimatedTime, setEstimatedTime] = useState<string>("");
+  const [currentBatch, setCurrentBatch] = useState<string>("");
   const [results, setResults] = useState<{
     total: number;
     processed: number;
@@ -62,14 +63,6 @@ export default function BulkEmailFinderModal({
     const seconds = totalSeconds % 60;
     setEstimatedTime(minutes > 0 ? `~${minutes}m ${seconds}s` : `~${seconds}s`);
 
-    // Simulate progress updates
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 95) return prev; // Cap at 95% until actual completion
-        return prev + 100 / leadIds.length;
-      });
-    }, timePerLead * 1000);
-
     try {
       const apiEndpoint =
         provider === "hunter"
@@ -77,59 +70,111 @@ export default function BulkEmailFinderModal({
           : provider === "tomba"
             ? "/api/tomba/bulk-search"
             : "/api/ai-email-finder/bulk-search";
-      const response = await fetch(apiEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          leadIds,
-          onlyMissing,
-        }),
-      });
 
-      clearInterval(progressInterval);
-      setProgress(100);
-
-      // Check content type before parsing
-      const contentType = response.headers.get("content-type");
-      const isJson = contentType?.includes("application/json");
-
-      if (!isJson) {
-        // Response is not JSON (likely HTML error page)
-        const textResponse = await response.text();
-        throw new Error(
-          `Server returned non-JSON response (${response.status}): ${textResponse.substring(0, 200)}...`,
-        );
+      // Process in chunks to avoid timeout (max 15 leads per chunk to stay under 30s)
+      const CHUNK_SIZE = 15;
+      const chunks: string[][] = [];
+      for (let i = 0; i < leadIds.length; i += CHUNK_SIZE) {
+        chunks.push(leadIds.slice(i, i + CHUNK_SIZE));
       }
 
-      let data;
-      try {
-        data = await response.json();
-      } catch (parseError: any) {
-        throw new Error(
-          `Failed to parse JSON response: ${parseError.message}. This may indicate a server error. Status: ${response.status}`,
-        );
-      }
+      // Aggregate results across all chunks
+      const aggregatedResults = {
+        total: leadIds.length,
+        processed: 0,
+        skipped: 0,
+        successful: 0,
+        failed: 0,
+        details: [] as ProcessingResult[],
+      };
 
-      if (!response.ok) {
-        // Check if we got partial results even with an error
-        if (data.results) {
-          setResults(data.results);
-          setError(
-            data.error ||
-              `Request failed with status ${response.status}. Partial results shown below.`,
+      // Process each chunk sequentially
+      for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex++) {
+        const chunk = chunks[chunkIndex];
+        setCurrentBatch(
+          `Processing batch ${chunkIndex + 1} of ${chunks.length}`,
+        );
+
+        try {
+          const response = await fetch(apiEndpoint, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              leadIds: chunk,
+              onlyMissing,
+            }),
+          });
+
+          // Check content type before parsing
+          const contentType = response.headers.get("content-type");
+          const isJson = contentType?.includes("application/json");
+
+          if (!isJson) {
+            // Response is not JSON (likely HTML error page)
+            const textResponse = await response.text();
+            throw new Error(
+              `Server returned non-JSON response (${response.status}): ${textResponse.substring(0, 200)}...`,
+            );
+          }
+
+          let data;
+          try {
+            data = await response.json();
+          } catch (parseError: any) {
+            throw new Error(
+              `Failed to parse JSON response: ${parseError.message}. This may indicate a server error. Status: ${response.status}`,
+            );
+          }
+
+          if (!response.ok) {
+            // If chunk fails but has partial results, include them
+            if (data.results) {
+              aggregatedResults.processed += data.results.processed || 0;
+              aggregatedResults.skipped += data.results.skipped || 0;
+              aggregatedResults.successful += data.results.successful || 0;
+              aggregatedResults.failed += data.results.failed || 0;
+              aggregatedResults.details.push(...(data.results.details || []));
+              setError((prev) =>
+                prev
+                  ? `${prev}\nChunk ${chunkIndex + 1}/${chunks.length}: ${data.error || "Failed"}`
+                  : `Chunk ${chunkIndex + 1}/${chunks.length}: ${data.error || "Failed"}`,
+              );
+            } else {
+              throw new Error(
+                data.error || `Chunk ${chunkIndex + 1}/${chunks.length} failed`,
+              );
+            }
+          } else {
+            // Success - aggregate results
+            const chunkResults = data.results;
+            aggregatedResults.processed += chunkResults.processed || 0;
+            aggregatedResults.skipped += chunkResults.skipped || 0;
+            aggregatedResults.successful += chunkResults.successful || 0;
+            aggregatedResults.failed += chunkResults.failed || 0;
+            aggregatedResults.details.push(...(chunkResults.details || []));
+          }
+
+          // Update progress after each chunk
+          setProgress(Math.min(95, ((chunkIndex + 1) / chunks.length) * 100));
+        } catch (chunkError: any) {
+          // Log chunk error but continue with remaining chunks
+          setError((prev) =>
+            prev
+              ? `${prev}\nChunk ${chunkIndex + 1}/${chunks.length}: ${chunkError.message}`
+              : `Chunk ${chunkIndex + 1}/${chunks.length}: ${chunkError.message}`,
           );
-          onComplete();
-        } else {
-          throw new Error(data.error || "Failed to search emails");
+          // Mark remaining leads in this chunk as failed
+          aggregatedResults.failed += chunk.length;
         }
-      } else {
-        setResults(data.results);
-        onComplete();
       }
+
+      // Set final results
+      setProgress(100);
+      setResults(aggregatedResults);
+      onComplete();
     } catch (err: any) {
-      clearInterval(progressInterval);
       setError(err.message || "An error occurred while searching for emails");
     } finally {
       setIsSearching(false);
@@ -289,11 +334,17 @@ export default function BulkEmailFinderModal({
               <p className="text-gray-600 font-medium">
                 Searching for emails...
               </p>
-              <p className="text-sm text-gray-500 mt-2 mb-6">
+              <p className="text-sm text-gray-500 mt-2">
                 Processing {leadIds.length} lead
                 {leadIds.length !== 1 ? "s" : ""} • Estimated time:{" "}
                 {estimatedTime}
               </p>
+              {currentBatch && (
+                <p className="text-xs text-blue-600 mt-1 mb-6 font-medium">
+                  {currentBatch}
+                </p>
+              )}
+              {!currentBatch && <div className="mb-6" />}
 
               {/* Progress Bar */}
               <div className="w-full max-w-md">
