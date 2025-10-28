@@ -51,30 +51,72 @@ export default function SendGridCheckModal({
     details: CheckResult[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
 
   const handleCheck = async () => {
     setIsChecking(true);
     setError(null);
     setResults(null);
+    setProgress(null);
 
     try {
-      const response = await fetch("/api/sendgrid/bulk-check", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          leadIds,
-        }),
-      });
+      // Process in batches of 100 to avoid request size limits
+      const BATCH_SIZE = 100;
+      const batches = [];
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to check leads");
+      for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
+        batches.push(leadIds.slice(i, i + BATCH_SIZE));
       }
 
-      const data = await response.json();
-      setResults(data.results);
+      console.log(
+        `Processing ${leadIds.length} leads in ${batches.length} batches`,
+      );
+
+      // Process all batches and combine results
+      const allResults: CheckResult[] = [];
+      let totalSafe = 0;
+      let totalWarnings = 0;
+      let totalBlocked = 0;
+
+      for (let i = 0; i < batches.length; i++) {
+        setProgress({ current: i + 1, total: batches.length });
+        const batch = batches[i];
+        console.log(
+          `Processing batch ${i + 1}/${batches.length} (${batch.length} leads)`,
+        );
+
+        const response = await fetch("/api/sendgrid/bulk-check", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            leadIds: batch,
+          }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Failed to check batch ${i + 1}`);
+        }
+
+        const data = await response.json();
+        allResults.push(...data.results.details);
+        totalSafe += data.results.safe;
+        totalWarnings += data.results.warnings;
+        totalBlocked += data.results.blocked;
+      }
+
+      setResults({
+        total: leadIds.length,
+        safe: totalSafe,
+        warnings: totalWarnings,
+        blocked: totalBlocked,
+        details: allResults,
+      });
     } catch (err: any) {
       setError(err.message || "An error occurred while checking leads");
     } finally {
@@ -194,10 +236,17 @@ export default function SendGridCheckModal({
               <p className="text-gray-600 font-medium">
                 Checking SendGrid status...
               </p>
-              <p className="text-sm text-gray-500 mt-2">
-                Verifying {leadIds.length} lead{leadIds.length !== 1 ? "s" : ""}{" "}
-                against suppression lists
-              </p>
+              {progress ? (
+                <p className="text-sm text-gray-500 mt-2">
+                  Processing batch {progress.current} of {progress.total} (
+                  {Math.round((progress.current / progress.total) * 100)}%)
+                </p>
+              ) : (
+                <p className="text-sm text-gray-500 mt-2">
+                  Verifying {leadIds.length} lead
+                  {leadIds.length !== 1 ? "s" : ""} against suppression lists
+                </p>
+              )}
             </div>
           )}
 
