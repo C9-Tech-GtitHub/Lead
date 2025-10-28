@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { exportSalesLeads, exportAllEmails } from "@/lib/export/sales-csv";
 import { LeadDetailModal } from "../runs/lead-detail-modal";
 import BulkEmailFinderModal from "./bulk-email-finder-modal";
+import SendGridCheckModal from "./sendgrid-check-modal";
 
 interface Lead {
   id: string;
@@ -131,6 +132,7 @@ export function LeadsDashboard({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showBulkEmailFinder, setShowBulkEmailFinder] = useState(false);
+  const [showSendGridCheck, setShowSendGridCheck] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [duplicateRunSuggestions, setDuplicateRunSuggestions] = useState<any[]>(
     [],
@@ -1121,6 +1123,14 @@ export function LeadsDashboard({
               📧 Find Emails ({selectedLeads.size})
             </button>
             <button
+              onClick={() => setShowSendGridCheck(true)}
+              disabled={selectedLeads.size === 0}
+              className="px-4 py-2 bg-green-600 dark:bg-green-700 text-white rounded-md text-sm font-medium hover:bg-green-700 dark:hover:bg-green-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
+              title="Check selected leads against SendGrid suppression lists"
+            >
+              🛡️ Check SendGrid ({selectedLeads.size})
+            </button>
+            <button
               onClick={handleSendGridSync}
               disabled={isSyncing}
               className="px-4 py-2 bg-blue-600 dark:bg-blue-700 text-white rounded-md text-sm font-medium hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
@@ -1461,6 +1471,14 @@ export function LeadsDashboard({
             fetchLeads(); // Refresh the leads list to show updated email counts
             setEmailCounts({}); // Clear and refresh email counts
           }}
+        />
+      )}
+
+      {/* SendGrid Check Modal */}
+      {showSendGridCheck && (
+        <SendGridCheckModal
+          leadIds={Array.from(selectedLeads)}
+          onClose={() => setShowSendGridCheck(false)}
         />
       )}
     </div>
