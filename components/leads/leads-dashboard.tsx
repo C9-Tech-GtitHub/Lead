@@ -132,6 +132,9 @@ export function LeadsDashboard({
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showBulkEmailFinder, setShowBulkEmailFinder] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [duplicateRunSuggestions, setDuplicateRunSuggestions] = useState<any[]>(
+    [],
+  );
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);

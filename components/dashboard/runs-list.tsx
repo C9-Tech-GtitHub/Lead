@@ -42,6 +42,9 @@ export function RunsList({ initialRuns }: RunsListProps) {
   );
   const [clearingRuns, setClearingRuns] = useState<Set<string>>(new Set());
   const [completingRuns, setCompletingRuns] = useState<Set<string>>(new Set());
+  const [editingRun, setEditingRun] = useState<string | null>(null);
+  const [editBusinessType, setEditBusinessType] = useState("");
+  const [editLocation, setEditLocation] = useState("");
 
   // Helper function to refresh a single run's data
   const refreshRun = async (runId: string) => {
@@ -61,6 +64,48 @@ export function RunsList({ initialRuns }: RunsListProps) {
     } catch (error) {
       console.error("Error refreshing run:", error);
     }
+  };
+
+  const handleRenameRun = async (runId: string) => {
+    if (!editBusinessType.trim() && !editLocation.trim()) {
+      alert("Please enter a business type or location");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/runs/${runId}/rename`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessType: editBusinessType.trim() || undefined,
+          location: editLocation.trim() || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to rename run");
+      }
+
+      await refreshRun(runId);
+      setEditingRun(null);
+      setEditBusinessType("");
+      setEditLocation("");
+    } catch (error) {
+      console.error("Error renaming run:", error);
+      alert("Failed to rename run");
+    }
+  };
+
+  const startEditing = (run: Run) => {
+    setEditingRun(run.id);
+    setEditBusinessType(run.business_type);
+    setEditLocation(run.location);
+  };
+
+  const cancelEditing = () => {
+    setEditingRun(null);
+    setEditBusinessType("");
+    setEditLocation("");
   };
 
   const handlePauseRun = async (runId: string, e: React.MouseEvent) => {
@@ -543,15 +588,74 @@ export function RunsList({ initialRuns }: RunsListProps) {
           className="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-6"
         >
           <div className="flex justify-between items-start mb-4">
-            <Link href={`/dashboard/runs/${run.id}`} className="flex-1">
-              <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600">
-                {run.business_type} in {run.location}
-              </h3>
-              <p className="text-sm text-gray-500 mt-1">
-                Target: {run.target_count} leads • Created{" "}
-                {formatDateAU(run.created_at)}
-              </p>
-            </Link>
+            {editingRun === run.id ? (
+              <div className="flex-1 space-y-2">
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={editBusinessType}
+                    onChange={(e) => setEditBusinessType(e.target.value)}
+                    placeholder="Business Type"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                    autoFocus
+                  />
+                  <span className="text-gray-500">in</span>
+                  <input
+                    type="text"
+                    value={editLocation}
+                    onChange={(e) => setEditLocation(e.target.value)}
+                    placeholder="Location"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleRenameRun(run.id)}
+                    className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700"
+                  >
+                    ✓ Save
+                  </button>
+                  <button
+                    onClick={cancelEditing}
+                    className="px-3 py-1 bg-gray-300 text-gray-700 rounded text-xs font-medium hover:bg-gray-400"
+                  >
+                    ✕ Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-start gap-2">
+                <Link href={`/dashboard/runs/${run.id}`} className="flex-1">
+                  <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600">
+                    {run.business_type} in {run.location}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Target: {run.target_count} leads • Created{" "}
+                    {formatDateAU(run.created_at)}
+                  </p>
+                </Link>
+                <button
+                  onClick={() => startEditing(run)}
+                  className="text-gray-400 hover:text-blue-600 p-1"
+                  title="Rename run"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <StatusBadge status={run.status} isPaused={run.is_paused} />
 
