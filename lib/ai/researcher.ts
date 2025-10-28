@@ -6,6 +6,10 @@
  */
 
 import OpenAI from "openai";
+import {
+  validateLead,
+  isValidBusinessWebsite,
+} from "../validation/lead-validator";
 
 interface ResearchLeadParams {
   name: string;
@@ -53,6 +57,47 @@ export async function deepResearchLead(
 ): Promise<LeadAnalysis> {
   try {
     console.log(`[DEEP AI Researcher] Analyzing lead: ${params.name}`);
+
+    // VALIDATION: Check for invalid websites (social media, directories, etc.)
+    const websiteValidation = isValidBusinessWebsite(params.website);
+    if (!websiteValidation.isValid) {
+      console.log(
+        `[DEEP AI Researcher] Invalid website detected for ${params.name}: ${websiteValidation.reason}`,
+      );
+      return {
+        report: `This lead has been automatically marked as Grade F due to an invalid website.\n\nIssue: ${websiteValidation.reason}\n\nBusinesses must have a proper business website (not social media profiles, Google Maps, or directory listings) to qualify for SEO services.`,
+        grade: "F",
+        gradeReasoning: `INVALID WEBSITE: ${websiteValidation.reason}. ${websiteValidation.platform ? `This is a ${websiteValidation.platform}.` : ""} Business must have a proper website to qualify.`,
+        suggestedHooks: null,
+        painPoints: null,
+        opportunities: null,
+      };
+    }
+
+    // Comprehensive lead validation
+    const validation = validateLead({
+      name: params.name,
+      website: params.website,
+      businessType: params.businessType,
+      websiteContent: params.websiteContent,
+      aboutContent: params.aboutContent,
+    });
+
+    // If validation fails, return Grade F immediately
+    if (!validation.isValid) {
+      console.log(
+        `[DEEP AI Researcher] Lead validation failed for ${params.name}: ${validation.reasoning}`,
+      );
+      return {
+        report: `This lead has been automatically marked as Grade F due to validation failures.\n\n${validation.issues.map((issue, i) => `${i + 1}. ${issue}`).join("\n")}\n\nBusinesses must have proper websites and match the target industry to qualify.`,
+        grade: "F",
+        gradeReasoning: validation.reasoning,
+        suggestedHooks: null,
+        painPoints: null,
+        opportunities: null,
+      };
+    }
+
     const openai = getOpenAIClient();
 
     // Construct the analysis prompt with all available data
