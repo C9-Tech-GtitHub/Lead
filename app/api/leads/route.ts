@@ -32,185 +32,126 @@ export async function GET(request: NextRequest) {
   const sortField = searchParams.get("sortField") || "created_at";
   const sortDirection = searchParams.get("sortDirection") || "desc";
 
-  // Calculate range
-  const from = (page - 1) * pageSize;
-  const to = from + pageSize - 1;
-
   try {
-    // STEP 1: Build and execute main leads query with filters
-    let query = supabase.from("leads").select(
-      `
-        *,
-        run:runs!inner(
-          id,
-          business_type,
-          location,
-          created_at
-        )
-      `,
-      { count: "exact" },
-    );
-
-    // Apply sorting
-    const ascending = sortDirection === "asc";
-    switch (sortField) {
-      case "name":
-        query = query.order("name", { ascending });
-        break;
-      case "grade":
-        query = query.order("compatibility_grade", {
-          ascending,
-          nullsFirst: false,
-        });
-        break;
-      case "created_at":
-        query = query.order("created_at", { ascending });
-        break;
-      case "last_sent":
-        query = query.order("last_email_sent_at", {
-          ascending,
-          nullsFirst: false,
-        });
-        break;
-      default:
-        query = query.order("created_at", { ascending: false });
-    }
+    // STEP 1: Get filtered lead IDs (with email type and eligibility filtering)
+    let baseQuery = supabase
+      .from("leads")
+      .select("id, email_domain, last_email_sent_at", { count: "exact" });
 
     // Apply basic filters
     if (statusFilter !== "all") {
-      query = query.eq("lead_status", statusFilter);
+      baseQuery = baseQuery.eq("lead_status", statusFilter);
     }
 
     if (gradeFilter !== "all") {
-      query = query.eq("compatibility_grade", gradeFilter);
+      baseQuery = baseQuery.eq("compatibility_grade", gradeFilter);
     }
 
     if (gradeRangeFilter !== "all") {
       if (gradeRangeFilter === "A-B") {
-        query = query.in("compatibility_grade", ["A", "B"]);
+        baseQuery = baseQuery.in("compatibility_grade", ["A", "B"]);
       }
     }
 
     if (runFilter !== "all") {
       if (runFilter.includes(",")) {
         const runIds = runFilter.split(",").filter(Boolean);
-        query = query.in("run_id", runIds);
+        baseQuery = baseQuery.in("run_id", runIds);
       } else {
-        query = query.eq("run_id", runFilter);
+        baseQuery = baseQuery.eq("run_id", runFilter);
       }
     }
 
     if (emailStatusFilter !== "all") {
-      query = query.eq("email_status", emailStatusFilter);
+      baseQuery = baseQuery.eq("email_status", emailStatusFilter);
     }
 
     if (searchQuery) {
-      query = query.or(
+      baseQuery = baseQuery.or(
         `name.ilike.%${searchQuery}%,website.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%,industry.ilike.%${searchQuery}%`,
       );
     }
 
     if (aiSearchedNoEmails === "true") {
-      query = query
+      baseQuery = baseQuery
         .not("ai_email_searched_at", "is", null)
         .not("ai_email_search_summary", "is", null);
     } else if (aiSearchedNoEmails === "false") {
-      query = query.or(
+      baseQuery = baseQuery.or(
         "ai_email_searched_at.is.null,ai_email_search_summary.is.null",
       );
     }
 
-    // Apply pagination
-    query = query.range(from, to);
+    const { data: baseLeads, error: baseError } = await baseQuery;
 
-    const { data: leads, error, count } = await query;
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (baseError) {
+      return NextResponse.json({ error: baseError.message }, { status: 500 });
     }
 
-    if (!leads || leads.length === 0) {
+    if (!baseLeads || baseLeads.length === 0) {
       return NextResponse.json({
         leads: [],
         emailCounts: {},
         pagination: {
           page,
           pageSize,
-          total: count || 0,
+          total: 0,
           totalPages: 0,
         },
       });
     }
 
-    // STEP 2: Apply post-fetch filters and gather enrichment data in parallel
-    let filteredLeads = leads;
-    const leadIds = leads.map((l) => l.id);
-    const domains = Array.from(
-      new Set(leads.map((l) => l.email_domain).filter(Boolean)),
-    );
+    // STEP 2: Apply email type and eligibility filters
+    let filteredLeadIds = baseLeads.map((l) => l.id);
 
-    // Run all enrichment queries in parallel
-    const [
-      emailTypeResult,
-      emailCountResult,
-      suppressionResult,
-      contactResult,
-    ] = await Promise.all([
-      // Email type data for filtering
-      emailTypeFilter !== "all"
-        ? supabase
-            .from("lead_emails")
-            .select("lead_id, type")
-            .in("lead_id", leadIds)
-        : Promise.resolve({ data: null }),
+    // Email type filtering
+    if (emailTypeFilter !== "all") {
+      const { data: emailTypeData } = await supabase
+        .from("lead_emails")
+        .select("lead_id")
+        .in("lead_id", filteredLeadIds)
+        .eq("type", emailTypeFilter);
 
-      // Email counts
-      supabase.from("lead_emails").select("lead_id").in("lead_id", leadIds),
-
-      // Suppression data (batched by domains)
-      domains.length > 0
-        ? supabase
-            .from("email_suppression")
-            .select("domain, email, source, reason, asm_group_name")
-            .in("domain", domains)
-        : Promise.resolve({ data: null }),
-
-      // Contact tracking (batched by domains)
-      domains.length > 0
-        ? supabase
-            .from("domain_contact_tracking")
-            .select("domain, last_contacted_at, can_contact_after")
-            .in("domain", domains)
-        : Promise.resolve({ data: null }),
-    ]);
-
-    // STEP 3: Process email type filter
-    if (emailTypeFilter !== "all" && emailTypeResult.data) {
       const leadsWithEmailType = new Set(
-        emailTypeResult.data
-          .filter((e) => e.type === emailTypeFilter)
-          .map((e) => e.lead_id),
+        emailTypeData?.map((e) => e.lead_id) || [],
       );
-      filteredLeads = filteredLeads.filter((l) => leadsWithEmailType.has(l.id));
+      filteredLeadIds = filteredLeadIds.filter((id) =>
+        leadsWithEmailType.has(id),
+      );
     }
 
-    // STEP 4: Build lookup maps for eligibility filtering
-    const leadsWithEmails = new Set(
-      emailCountResult.data?.map((e) => e.lead_id) || [],
-    );
-    const suppressedDomains = new Set(
-      suppressionResult.data?.map((s) => s.domain) || [],
-    );
-    const onHoldDomains = new Set(
-      contactResult.data
-        ?.filter((c) => new Date(c.can_contact_after) > new Date())
-        .map((c) => c.domain) || [],
-    );
-
-    // STEP 5: Apply email eligibility filter
+    // Eligibility filtering
     if (emailEligibilityFilter !== "all") {
-      const eligibleLeads = new Set<string>();
-      filteredLeads.forEach((lead) => {
+      // Get all email data for eligibility check
+      const [emailsResult, suppressionResult, contactResult] =
+        await Promise.all([
+          supabase
+            .from("lead_emails")
+            .select("lead_id")
+            .in("lead_id", filteredLeadIds),
+
+          supabase.from("email_suppression").select("domain"),
+
+          supabase
+            .from("domain_contact_tracking")
+            .select("domain, can_contact_after"),
+        ]);
+
+      const leadsWithEmails = new Set(
+        emailsResult.data?.map((e) => e.lead_id) || [],
+      );
+      const suppressedDomains = new Set(
+        suppressionResult.data?.map((s) => s.domain) || [],
+      );
+      const onHoldDomains = new Set(
+        contactResult.data
+          ?.filter((c) => new Date(c.can_contact_after) > new Date())
+          .map((c) => c.domain) || [],
+      );
+
+      // Build map of lead eligibility
+      const leadEligibilityMap = new Map<string, boolean>();
+      baseLeads.forEach((lead) => {
         const hasEmail = leadsWithEmails.has(lead.id);
         const isSuppressed = lead.email_domain
           ? suppressedDomains.has(lead.email_domain)
@@ -222,26 +163,121 @@ export async function GET(request: NextRequest) {
 
         const isEligible =
           hasEmail && !isSuppressed && !isOnHold && !hasBeenSent;
-
-        if (isEligible) {
-          eligibleLeads.add(lead.id);
-        }
+        leadEligibilityMap.set(lead.id, isEligible);
       });
 
       if (emailEligibilityFilter === "eligible") {
-        filteredLeads = filteredLeads.filter((l) => eligibleLeads.has(l.id));
+        filteredLeadIds = filteredLeadIds.filter(
+          (id) => leadEligibilityMap.get(id) === true,
+        );
       } else if (emailEligibilityFilter === "not_eligible") {
-        filteredLeads = filteredLeads.filter((l) => !eligibleLeads.has(l.id));
+        filteredLeadIds = filteredLeadIds.filter(
+          (id) => leadEligibilityMap.get(id) === false,
+        );
       }
     }
 
-    // STEP 6: Build email counts map
+    const totalFilteredCount = filteredLeadIds.length;
+
+    if (totalFilteredCount === 0) {
+      return NextResponse.json({
+        leads: [],
+        emailCounts: {},
+        pagination: {
+          page,
+          pageSize,
+          total: 0,
+          totalPages: 0,
+        },
+      });
+    }
+
+    // STEP 3: Paginate the filtered IDs
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize;
+    const paginatedIds = filteredLeadIds.slice(from, to);
+
+    // STEP 4: Fetch full lead data for paginated IDs only
+    let dataQuery = supabase
+      .from("leads")
+      .select(
+        `
+        *,
+        run:runs!inner(
+          id,
+          business_type,
+          location,
+          created_at
+        )
+      `,
+      )
+      .in("id", paginatedIds);
+
+    // Apply sorting
+    const ascending = sortDirection === "asc";
+    switch (sortField) {
+      case "name":
+        dataQuery = dataQuery.order("name", { ascending });
+        break;
+      case "grade":
+        dataQuery = dataQuery.order("compatibility_grade", {
+          ascending,
+          nullsFirst: false,
+        });
+        break;
+      case "created_at":
+        dataQuery = dataQuery.order("created_at", { ascending });
+        break;
+      case "last_sent":
+        dataQuery = dataQuery.order("last_email_sent_at", {
+          ascending,
+          nullsFirst: false,
+        });
+        break;
+      default:
+        dataQuery = dataQuery.order("created_at", { ascending: false });
+    }
+
+    const { data: leads, error: dataError } = await dataQuery;
+
+    if (dataError) {
+      return NextResponse.json({ error: dataError.message }, { status: 500 });
+    }
+
+    // STEP 5: Enrich leads with email counts, suppression, and contact data
+    const domains = Array.from(
+      new Set(leads?.map((l) => l.email_domain).filter(Boolean) || []),
+    );
+
+    const [emailCountResult, suppressionResult, contactResult] =
+      await Promise.all([
+        supabase
+          .from("lead_emails")
+          .select("lead_id")
+          .in("lead_id", paginatedIds),
+
+        domains.length > 0
+          ? supabase
+              .from("email_suppression")
+              .select("domain, email, source, reason, asm_group_name")
+              .in("domain", domains)
+          : Promise.resolve({ data: null }),
+
+        domains.length > 0
+          ? supabase
+              .from("domain_contact_tracking")
+              .select("domain, last_contacted_at, can_contact_after")
+              .in("domain", domains)
+          : Promise.resolve({ data: null }),
+      ]);
+
+    // Build email counts map
     const emailCounts: Record<string, number> = {};
     emailCountResult.data?.forEach((email) => {
       emailCounts[email.lead_id] = (emailCounts[email.lead_id] || 0) + 1;
     });
 
-    // STEP 7: Build suppression and contact lookup maps
+    // Build suppression and contact lookup maps
     const suppressionByDomain: Record<string, any[]> = {};
     suppressionResult.data?.forEach((supp) => {
       if (!suppressionByDomain[supp.domain]) {
@@ -255,8 +291,8 @@ export async function GET(request: NextRequest) {
       contactByDomain[contact.domain] = contact;
     });
 
-    // STEP 8: Enrich leads with suppression and contact info
-    const enrichedLeads = filteredLeads.map((lead) => ({
+    // Enrich leads with suppression and contact info
+    const enrichedLeads = leads?.map((lead) => ({
       ...lead,
       suppression: lead.email_domain
         ? suppressionByDomain[lead.email_domain] || null
@@ -267,13 +303,13 @@ export async function GET(request: NextRequest) {
     }));
 
     return NextResponse.json({
-      leads: enrichedLeads,
+      leads: enrichedLeads || [],
       emailCounts,
       pagination: {
         page,
         pageSize,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / pageSize),
+        total: totalFilteredCount,
+        totalPages: Math.ceil(totalFilteredCount / pageSize),
       },
     });
   } catch (error: any) {
