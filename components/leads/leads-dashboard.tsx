@@ -544,34 +544,47 @@ export function LeadsDashboard({
     }
   };
 
-  // Export to CSV (all filtered leads, not just current page)
+  // Export to CSV (selected leads if any, otherwise all filtered leads)
   const handleExport = async () => {
     setIsExporting(true);
 
     try {
       const supabase = createClient();
 
-      // Build query for ALL filtered leads (not just current page)
-      let query = supabase
-        .from("leads")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(10000); // Cap at 10k for export
+      let exportLeads;
 
-      if (statusFilter !== "all") {
-        query = query.eq("lead_status", statusFilter);
-      }
-      if (gradeFilter !== "all") {
-        query = query.eq("compatibility_grade", gradeFilter);
-      }
-      if (runFilter !== "all") {
-        query = query.eq("run_id", runFilter);
-      }
-      if (emailStatusFilter !== "all") {
-        query = query.eq("email_status", emailStatusFilter);
-      }
+      // If leads are selected, export only those
+      if (selectedLeads.size > 0) {
+        const leadIds = Array.from(selectedLeads);
+        const { data } = await supabase
+          .from("leads")
+          .select("*")
+          .in("id", leadIds);
+        exportLeads = data;
+      } else {
+        // Otherwise, build query for ALL filtered leads (not just current page)
+        let query = supabase
+          .from("leads")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(10000); // Cap at 10k for export
 
-      const { data: exportLeads } = await query;
+        if (statusFilter !== "all") {
+          query = query.eq("lead_status", statusFilter);
+        }
+        if (gradeFilter !== "all") {
+          query = query.eq("compatibility_grade", gradeFilter);
+        }
+        if (runFilter !== "all") {
+          query = query.eq("run_id", runFilter);
+        }
+        if (emailStatusFilter !== "all") {
+          query = query.eq("email_status", emailStatusFilter);
+        }
+
+        const { data } = await query;
+        exportLeads = data;
+      }
 
       if (!exportLeads || exportLeads.length === 0) {
         alert("No leads to export");
@@ -616,34 +629,47 @@ export function LeadsDashboard({
     }
   };
 
-  // Export all emails with full details
+  // Export all emails with full details (selected leads if any, otherwise all filtered leads)
   const handleExportAllEmails = async () => {
     setIsExporting(true);
 
     try {
       const supabase = createClient();
 
-      // Build query for ALL filtered leads (not just current page)
-      let query = supabase
-        .from("leads")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(10000); // Cap at 10k for export
+      let exportLeads;
 
-      if (statusFilter !== "all") {
-        query = query.eq("lead_status", statusFilter);
-      }
-      if (gradeFilter !== "all") {
-        query = query.eq("compatibility_grade", gradeFilter);
-      }
-      if (runFilter !== "all") {
-        query = query.eq("run_id", runFilter);
-      }
-      if (emailStatusFilter !== "all") {
-        query = query.eq("email_status", emailStatusFilter);
-      }
+      // If leads are selected, export only those
+      if (selectedLeads.size > 0) {
+        const leadIds = Array.from(selectedLeads);
+        const { data } = await supabase
+          .from("leads")
+          .select("*")
+          .in("id", leadIds);
+        exportLeads = data;
+      } else {
+        // Otherwise, build query for ALL filtered leads (not just current page)
+        let query = supabase
+          .from("leads")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(10000); // Cap at 10k for export
 
-      const { data: exportLeads } = await query;
+        if (statusFilter !== "all") {
+          query = query.eq("lead_status", statusFilter);
+        }
+        if (gradeFilter !== "all") {
+          query = query.eq("compatibility_grade", gradeFilter);
+        }
+        if (runFilter !== "all") {
+          query = query.eq("run_id", runFilter);
+        }
+        if (emailStatusFilter !== "all") {
+          query = query.eq("email_status", emailStatusFilter);
+        }
+
+        const { data } = await query;
+        exportLeads = data;
+      }
 
       if (!exportLeads || exportLeads.length === 0) {
         alert("No leads to export");

@@ -189,7 +189,10 @@ export async function POST(request: Request) {
 
           const { error: insertError } = await supabase
             .from("lead_emails")
-            .insert(emailRecords);
+            .upsert(emailRecords, {
+              onConflict: "lead_id,email",
+              ignoreDuplicates: false, // Update existing records with new data
+            });
 
           if (insertError) {
             console.error(
@@ -231,7 +234,7 @@ export async function POST(request: Request) {
     };
 
     // Process leads in parallel with concurrency limit
-    const CONCURRENCY_LIMIT = 10; // Process 10 leads at a time
+    const CONCURRENCY_LIMIT = 20; // Process 20 leads at a time
     const allResults: any[] = [];
 
     for (let i = 0; i < leads.length; i += CONCURRENCY_LIMIT) {

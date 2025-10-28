@@ -236,10 +236,18 @@ You prioritize decision-makers and key contacts over generic emails.`,
             "[AI Email Finder] Initial JSON parse failed, attempting cleanup",
           );
 
+          let cleanedJson = jsonStr;
+
+          // Remove markdown links like ([text](url)) that break JSON
+          cleanedJson = cleanedJson.replace(/\s*\([^\)]*\]\([^\)]*\)\)/g, "");
+
+          // Remove any other markdown links [text](url)
+          cleanedJson = cleanedJson.replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+
           // Remove any trailing incomplete text after the last closing brace
-          const lastBrace = jsonStr.lastIndexOf("}");
+          const lastBrace = cleanedJson.lastIndexOf("}");
           if (lastBrace !== -1) {
-            const cleanedJson = jsonStr.substring(0, lastBrace + 1);
+            cleanedJson = cleanedJson.substring(0, lastBrace + 1);
             console.log(
               `[AI Email Finder] Trying cleaned JSON (length ${cleanedJson.length})`,
             );
