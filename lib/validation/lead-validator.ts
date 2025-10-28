@@ -15,6 +15,7 @@ const INVALID_WEBSITE_PATTERNS = [
   // Social Media
   "facebook.com",
   "fb.com",
+  "facebook.com/pages",
   "instagram.com",
   "youtube.com",
   "youtu.be",
@@ -26,22 +27,61 @@ const INVALID_WEBSITE_PATTERNS = [
   "pinterest.com",
   "reddit.com",
 
-  // Maps & Directories
+  // Maps & Navigation
   "google.com/maps",
   "maps.google.com",
   "goo.gl/maps",
   "maps.app.goo.gl",
+  "maps.apple.com",
   "waze.com",
+  "here.com",
+  "mapquest.com",
+  "openstreetmap.org",
+
+  // Review & Rating Sites
   "yelp.com",
+  "tripadvisor.com",
+  "foursquare.com",
+  "zomato.com",
+  "opentable.com",
+
+  // Business Directories (US/International)
   "yellowpages.com",
+  "whitepages.com",
+  "superpages.com",
+  "manta.com",
+  "citysearch.com",
+  "merchantcircle.com",
+  "bbb.org",
+  "angi.com",
+  "thumbtack.com",
+  "homeadvisor.com",
+
+  // Australian Directories
   "yellowpages.com.au",
   "whitepages.com.au",
-  "whitepages.com",
   "truelocal.com.au",
   "localsearch.com.au",
   "hotfrog.com.au",
   "hipages.com.au",
-  "tripadvisor.com",
+  "startlocal.com.au",
+  "whereis.com",
+  "productreview.com.au",
+  "australianbusinessdirectory.com.au",
+  "finda.com.au",
+  "eatability.com.au",
+
+  // UK/European Directories
+  "yell.com",
+  "thomsonlocal.com",
+  "192.com",
+
+  // Social/Community
+  "nextdoor.com",
+
+  // Specialized Directories
+  "houzz.com",
+  "homestars.com",
 
   // Other platforms
   "wix.com",

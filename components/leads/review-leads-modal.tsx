@@ -138,20 +138,39 @@ export default function ReviewLeadsModal({
                 </h3>
                 <ul className="text-sm text-purple-800 space-y-1">
                   <li>
-                    • <strong>Social Media URLs:</strong> Facebook, Instagram,
-                    YouTube, Twitter, LinkedIn, TikTok
+                    • <strong>Social Media:</strong> Facebook, Instagram,
+                    YouTube, Twitter, LinkedIn, TikTok, Pinterest, Reddit,
+                    Nextdoor
                   </li>
                   <li>
-                    • <strong>Directory Listings:</strong> Google Maps, Waze,
-                    Yelp, Yellow Pages, White Pages, TrueLocal, HiPages
+                    • <strong>Maps & Navigation:</strong> Google Maps, Apple
+                    Maps, Waze, MapQuest, OpenStreetMap
                   </li>
                   <li>
-                    • <strong>Invalid Domains:</strong> Missing or malformed
-                    website URLs
+                    • <strong>Review Sites:</strong> Yelp, TripAdvisor,
+                    Foursquare, Zomato, OpenTable
+                  </li>
+                  <li>
+                    • <strong>US Directories:</strong> Yellow Pages, White
+                    Pages, Superpages, Manta, BBB, Angi, Thumbtack, HomeAdvisor
+                  </li>
+                  <li>
+                    • <strong>Australian Directories:</strong> TrueLocal,
+                    HiPages, Hotfrog, LocalSearch, StartLocal, ProductReview
+                  </li>
+                  <li>
+                    • <strong>UK/EU Directories:</strong> Yell, Thomson Local
+                  </li>
+                  <li>
+                    • <strong>Specialized:</strong> Houzz, HomeStars, Eatability
                   </li>
                   <li>
                     • <strong>Platform Pages:</strong> Wix.com, WordPress.com,
                     Blogspot
+                  </li>
+                  <li>
+                    • <strong>Invalid Domains:</strong> Missing or malformed
+                    website URLs
                   </li>
                 </ul>
               </div>
