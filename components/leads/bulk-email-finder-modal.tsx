@@ -91,14 +91,43 @@ export default function BulkEmailFinderModal({
       clearInterval(progressInterval);
       setProgress(100);
 
-      const data = await response.json();
+      // Check content type before parsing
+      const contentType = response.headers.get("content-type");
+      const isJson = contentType?.includes("application/json");
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to search emails");
+      if (!isJson) {
+        // Response is not JSON (likely HTML error page)
+        const textResponse = await response.text();
+        throw new Error(
+          `Server returned non-JSON response (${response.status}): ${textResponse.substring(0, 200)}...`,
+        );
       }
 
-      setResults(data.results);
-      onComplete();
+      let data;
+      try {
+        data = await response.json();
+      } catch (parseError: any) {
+        throw new Error(
+          `Failed to parse JSON response: ${parseError.message}. This may indicate a server error. Status: ${response.status}`,
+        );
+      }
+
+      if (!response.ok) {
+        // Check if we got partial results even with an error
+        if (data.results) {
+          setResults(data.results);
+          setError(
+            data.error ||
+              `Request failed with status ${response.status}. Partial results shown below.`,
+          );
+          onComplete();
+        } else {
+          throw new Error(data.error || "Failed to search emails");
+        }
+      } else {
+        setResults(data.results);
+        onComplete();
+      }
     } catch (err: any) {
       clearInterval(progressInterval);
       setError(err.message || "An error occurred while searching for emails");
@@ -288,6 +317,26 @@ export default function BulkEmailFinderModal({
 
           {results && (
             <div className="space-y-6">
+              {/* Error Banner (shown when there's an error with partial results) */}
+              {error && (
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4">
+                  <div className="flex items-start">
+                    <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+                    <div>
+                      <h3 className="text-sm font-medium text-yellow-800">
+                        Partial Results
+                      </h3>
+                      <p className="text-sm text-yellow-700 mt-1">{error}</p>
+                      <p className="text-xs text-yellow-600 mt-2">
+                        Some leads were processed successfully. Check the
+                        detailed results below to see which ones succeeded or
+                        failed.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Summary Stats */}
               <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-gray-50 rounded-lg p-4">
