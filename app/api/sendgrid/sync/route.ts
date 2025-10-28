@@ -16,6 +16,19 @@ export async function POST(request: NextRequest) {
     return authResult.error;
   }
 
+  // Check if API key is configured
+  if (!process.env.SENDGRID_API_KEY) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "SendGrid API key is not configured. Please contact your administrator to add SENDGRID_API_KEY to environment variables.",
+        needsConfiguration: true,
+      },
+      { status: 503 }, // Service Unavailable
+    );
+  }
+
   try {
     console.log("Starting SendGrid sync...");
 

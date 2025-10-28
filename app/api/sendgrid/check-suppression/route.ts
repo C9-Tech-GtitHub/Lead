@@ -18,6 +18,14 @@ export async function POST(request: NextRequest) {
     return authResult.error;
   }
 
+  // Note: This endpoint uses database records, doesn't need SENDGRID_API_KEY
+  // But log a warning if it's not configured (data may be stale)
+  if (!process.env.SENDGRID_API_KEY) {
+    console.warn(
+      "[Check Suppression] SENDGRID_API_KEY not configured - using cached database records",
+    );
+  }
+
   try {
     const body = await request.json();
     const { email } = body;
@@ -73,6 +81,12 @@ export async function GET(request: NextRequest) {
   const authResult = await requireAuth();
   if ("error" in authResult) {
     return authResult.error;
+  }
+
+  if (!process.env.SENDGRID_API_KEY) {
+    console.warn(
+      "[Check Suppression GET] SENDGRID_API_KEY not configured - using cached database records",
+    );
   }
 
   const { searchParams } = new URL(request.url);

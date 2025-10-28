@@ -19,6 +19,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Note: Bulk check uses database records synced from SendGrid
+    // It doesn't need the API key to function, but warn if sync hasn't been done
+    if (!process.env.SENDGRID_API_KEY) {
+      console.warn(
+        "[Bulk SendGrid Check] SENDGRID_API_KEY not configured - data may be outdated",
+      );
+    }
+
     const { leadIds } = await request.json();
 
     if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
