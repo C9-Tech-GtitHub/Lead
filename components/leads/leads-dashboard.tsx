@@ -131,6 +131,7 @@ export function LeadsDashboard({
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showBulkEmailFinder, setShowBulkEmailFinder] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -241,6 +242,58 @@ export function LeadsDashboard({
       // New field, default to ascending (except created_at)
       setSortField(field);
       setSortDirection(field === "created_at" ? "desc" : "asc");
+    }
+  };
+
+  // Merge multiple runs
+  const handleMergeRuns = async () => {
+    if (selectedRuns.size < 2) {
+      alert("Please select at least 2 runs to merge");
+      return;
+    }
+
+    const selectedRunsData = runs.filter((r) => selectedRuns.has(r.id));
+    const runNames = selectedRunsData
+      .map((r) => `• ${r.business_type} - ${r.location} (${r.leadCount} leads)`)
+      .join("\n");
+    const totalLeadsBeforeMerge = selectedRunsData.reduce(
+      (sum, r) => sum + r.leadCount,
+      0,
+    );
+
+    const message = `Merge ${selectedRuns.size} runs into a single combined run?\n\n${runNames}\n\nTotal leads: ${totalLeadsBeforeMerge}\n${hideDuplicates ? "\n⚠️ Duplicates will be automatically removed" : "\n⚠️ All leads will be kept (including duplicates)"}`;
+
+    if (!confirm(message)) return;
+
+    setIsMerging(true);
+
+    try {
+      const response = await fetch("/api/runs/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          runIds: Array.from(selectedRuns),
+          removeDuplicates: hideDuplicates,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to merge runs");
+      }
+
+      // Show success message
+      const successMsg = `✅ Runs merged successfully!\n\nNew run: ${data.mergedRun.name}\nTotal leads: ${data.mergedRun.totalLeads}\n${data.mergedRun.duplicatesRemoved > 0 ? `Duplicates removed: ${data.mergedRun.duplicatesRemoved}` : "No duplicates found"}`;
+      alert(successMsg);
+
+      // Refresh the page to show new merged run
+      window.location.reload();
+    } catch (error: any) {
+      console.error("Merge error:", error);
+      alert(`Failed to merge runs: ${error.message}`);
+    } finally {
+      setIsMerging(false);
     }
   };
 
@@ -782,27 +835,12 @@ export function LeadsDashboard({
                             Remove Duplicates
                           </label>
                           <button
-                            onClick={async () => {
-                              // Export merged runs
-                              const runNames = runs
-                                .filter((r) => selectedRuns.has(r.id))
-                                .map(
-                                  (r) => `${r.business_type} - ${r.location}`,
-                                )
-                                .join(", ");
-
-                              const confirmed = confirm(
-                                `Export ${totalCount} leads from:\n${runNames}\n\n${hideDuplicates ? "Duplicates will be removed." : "Duplicates will be included."}`,
-                              );
-
-                              if (confirmed) {
-                                await handleExport();
-                              }
-                            }}
-                            className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700"
-                            title="Export merged runs to CSV"
+                            onClick={handleMergeRuns}
+                            disabled={isMerging}
+                            className="px-3 py-1 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                            title="Merge selected runs into one combined run in database"
                           >
-                            🔗 Merge & Export
+                            {isMerging ? "⏳ Merging..." : "🔗 Merge Runs"}
                           </button>
                         </>
                       )}
