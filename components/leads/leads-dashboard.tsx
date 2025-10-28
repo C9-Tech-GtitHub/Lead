@@ -6,6 +6,7 @@ import { exportSalesLeads, exportAllEmails } from "@/lib/export/sales-csv";
 import { LeadDetailModal } from "../runs/lead-detail-modal";
 import BulkEmailFinderModal from "./bulk-email-finder-modal";
 import SendGridCheckModal from "./sendgrid-check-modal";
+import ReviewLeadsModal from "./review-leads-modal";
 
 interface Lead {
   id: string;
@@ -133,6 +134,7 @@ export function LeadsDashboard({
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showBulkEmailFinder, setShowBulkEmailFinder] = useState(false);
   const [showSendGridCheck, setShowSendGridCheck] = useState(false);
+  const [showReviewLeads, setShowReviewLeads] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [duplicateRunSuggestions, setDuplicateRunSuggestions] = useState<any[]>(
     [],
@@ -1153,6 +1155,14 @@ export function LeadsDashboard({
             >
               {isExporting ? "Exporting..." : `📧 Export All Emails`}
             </button>
+            <button
+              onClick={() => setShowReviewLeads(true)}
+              disabled={totalCount === 0}
+              className="px-4 py-2 bg-purple-600 dark:bg-purple-700 text-white rounded-md text-sm font-medium hover:bg-purple-700 dark:hover:bg-purple-600 disabled:bg-gray-300 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
+              title="Review all leads for invalid websites (social media, directories, etc.)"
+            >
+              🔍 Review Leads
+            </button>
           </div>
         </div>
 
@@ -1479,6 +1489,17 @@ export function LeadsDashboard({
         <SendGridCheckModal
           leadIds={Array.from(selectedLeads)}
           onClose={() => setShowSendGridCheck(false)}
+        />
+      )}
+
+      {/* Review Leads Modal */}
+      {showReviewLeads && (
+        <ReviewLeadsModal
+          onClose={() => setShowReviewLeads(false)}
+          onComplete={() => {
+            fetchLeads(); // Refresh the leads list
+          }}
+          runId={runFilter}
         />
       )}
     </div>
