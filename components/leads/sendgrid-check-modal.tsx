@@ -169,8 +169,8 @@ export default function SendGridCheckModal({
                     enforcement
                   </li>
                   <li>
-                    • <strong>Previous Emails:</strong> Check if we've already
-                    emailed this lead
+                    • <strong>Previous Emails:</strong> Check if we&apos;ve
+                    already emailed this lead
                   </li>
                   <li>
                     • <strong>Email Availability:</strong> Verify leads have
@@ -256,8 +256,8 @@ export default function SendGridCheckModal({
                     <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
                     <div>
                       <h3 className="text-sm font-medium text-yellow-800">
-                        {results.warnings} lead{results.warnings !== 1 ? "s" : ""}{" "}
-                        have warnings
+                        {results.warnings} lead
+                        {results.warnings !== 1 ? "s" : ""} have warnings
                       </h3>
                       <p className="text-sm text-yellow-700 mt-1">
                         Review these leads carefully before sending.
