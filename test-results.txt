@@ -1,0 +1,250 @@
+
+Running 33 tests using 1 worker
+
+[1A[2K[1/33] [setup] › tests/auth.setup.ts:5:6 › authenticate
+[1A[2K[2/33] [chromium] › tests/01-authentication.spec.ts:4:7 › Authentication Flow › should load login page
+[1A[2K[3/33] [chromium] › tests/01-authentication.spec.ts:14:7 › Authentication Flow › should show validation for empty fields
+[1A[2K[4/33] [chromium] › tests/01-authentication.spec.ts:26:7 › Authentication Flow › should show error for invalid credentials
+[1A[2K[5/33] [chromium] › tests/01-authentication.spec.ts:37:7 › Authentication Flow › should login successfully with valid credentials
+[1A[2K[6/33] [chromium] › tests/01-authentication.spec.ts:51:7 › Authentication Flow › should have link to signup page
+[1A[2K[7/33] [chromium] › tests/01-authentication.spec.ts:59:7 › Authentication Flow › should redirect to login when accessing protected route without auth
+[1A[2K[8/33] [chromium] › tests/02-dashboard.spec.ts:7:7 › Dashboard Page › should load dashboard page
+[1A[2K  1) [chromium] › tests/02-dashboard.spec.ts:7:7 › Dashboard Page › should load dashboard page ─────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('text=Create New Run')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('text=Create New Run')[22m
+
+
+       9 |
+      10 |     await expect(page.locator('h1')).toContainText('Lead Research Runs');
+    > 11 |     await expect(page.locator('text=Create New Run')).toBeVisible();
+         |                                                       ^
+      12 |   });
+      13 |
+      14 |   test('should display dashboard header with navigation', async ({ page }) => {
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/02-dashboard.spec.ts:11:55
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/02-dashboard-Dashboard-Page-should-load-dashboard-page-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/02-dashboard-Dashboard-Page-should-load-dashboard-page-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/02-dashboard-Dashboard-Page-should-load-dashboard-page-chromium/error-context.md
+
+
+[1A[2K[9/33] [chromium] › tests/02-dashboard.spec.ts:14:7 › Dashboard Page › should display dashboard header with navigation
+[1A[2K[10/33] [chromium] › tests/02-dashboard.spec.ts:22:7 › Dashboard Page › should show runs list or empty state
+[1A[2K  2) [chromium] › tests/02-dashboard.spec.ts:22:7 › Dashboard Page › should show runs list or empty state 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      27 |     const hasEmptyState = await page.locator('text=/no runs|empty|get started/i').count();
+      28 |
+    > 29 |     expect(hasRuns > 0 || hasEmptyState > 0).toBeTruthy();
+         |                                              ^
+      30 |   });
+      31 |
+      32 |   test('should have create run button', async ({ page }) => {
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/02-dashboard.spec.ts:29:46
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/02-dashboard-Dashboard-Pag-7ed8b-ow-runs-list-or-empty-state-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/02-dashboard-Dashboard-Pag-7ed8b-ow-runs-list-or-empty-state-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/02-dashboard-Dashboard-Pag-7ed8b-ow-runs-list-or-empty-state-chromium/error-context.md
+
+
+[1A[2K[11/33] [chromium] › tests/02-dashboard.spec.ts:32:7 › Dashboard Page › should have create run button
+[1A[2K  3) [chromium] › tests/02-dashboard.spec.ts:32:7 › Dashboard Page › should have create run button ─
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: locator('button:has-text("Create New Run"), a:has-text("Create New Run")')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for locator('button:has-text("Create New Run"), a:has-text("Create New Run")')[22m
+
+
+      34 |
+      35 |     const createButton = page.locator('button:has-text("Create New Run"), a:has-text("Create New Run")');
+    > 36 |     await expect(createButton).toBeVisible();
+         |                                ^
+      37 |   });
+      38 |
+      39 |   test('should be able to click create run button', async ({ page }) => {
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/02-dashboard.spec.ts:36:32
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/02-dashboard-Dashboard-Page-should-have-create-run-button-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/02-dashboard-Dashboard-Page-should-have-create-run-button-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/02-dashboard-Dashboard-Page-should-have-create-run-button-chromium/error-context.md
+
+
+[1A[2K[12/33] [chromium] › tests/02-dashboard.spec.ts:39:7 › Dashboard Page › should be able to click create run button
+[1A[2K  4) [chromium] › tests/02-dashboard.spec.ts:39:7 › Dashboard Page › should be able to click create run button 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('button:has-text("Create New Run"), a:has-text("Create New Run")')[22m
+
+
+      41 |
+      42 |     const createButton = page.locator('button:has-text("Create New Run"), a:has-text("Create New Run")');
+    > 43 |     await createButton.click();
+         |                        ^
+      44 |
+      45 |     // Should either open a modal or navigate to a new page
+      46 |     // Wait a bit for UI to respond
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/02-dashboard.spec.ts:43:24
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/02-dashboard-Dashboard-Pag-0f7f6--to-click-create-run-button-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/02-dashboard-Dashboard-Pag-0f7f6--to-click-create-run-button-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/02-dashboard-Dashboard-Pag-0f7f6--to-click-create-run-button-chromium/error-context.md
+
+
+[1A[2K[13/33] [chromium] › tests/02-dashboard.spec.ts:52:7 › Navigation › should navigate to map page
+[1A[2K[14/33] [chromium] › tests/02-dashboard.spec.ts:65:7 › Navigation › should be able to navigate between pages
+[1A[2K[15/33] [chromium] › tests/03-leads-dashboard.spec.ts:7:7 › Leads Dashboard › should load home/leads dashboard page
+[1A[2K[16/33] [chromium] › tests/03-leads-dashboard.spec.ts:14:7 › Leads Dashboard › should display total lead count
+[1A[2K[17/33] [chromium] › tests/03-leads-dashboard.spec.ts:22:7 › Leads Dashboard › should display status counts
+[1A[2K[18/33] [chromium] › tests/03-leads-dashboard.spec.ts:33:7 › Leads Dashboard › should display runs list
+[1A[2K[19/33] [chromium] › tests/03-leads-dashboard.spec.ts:44:7 › Leads Dashboard › should have filter/search functionality
+[1A[2K[chromium] › tests/03-leads-dashboard.spec.ts:44:7 › Leads Dashboard › should have filter/search functionality
+Filter/search inputs found: [33m1[39m
+
+[1A[2K[20/33] [chromium] › tests/03-leads-dashboard.spec.ts:56:7 › Leads Dashboard › should have export functionality
+[1A[2K[21/33] [chromium] › tests/03-leads-dashboard.spec.ts:68:7 › Leads Dashboard › should display lead status options
+[1A[2K[22/33] [chromium] › tests/03-leads-dashboard.spec.ts:86:7 › Leads Dashboard › should load without JavaScript errors
+[1A[2K[23/33] [chromium] › tests/03-leads-dashboard.spec.ts:109:7 › Lead Management › should be able to interact with leads table
+[1A[2K  5) [chromium] › tests/03-leads-dashboard.spec.ts:109:7 › Lead Management › should be able to interact with leads table 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      118 |
+      119 |     // Some form of data display should exist
+    > 120 |     expect(hasTable || hasList).toBeTruthy();
+          |                                 ^
+      121 |   });
+      122 |
+      123 |   test('should display run information', async ({ page }) => {
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/03-leads-dashboard.spec.ts:120:33
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/03-leads-dashboard-Lead-Ma-f6c11-o-interact-with-leads-table-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/03-leads-dashboard-Lead-Ma-f6c11-o-interact-with-leads-table-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/03-leads-dashboard-Lead-Ma-f6c11-o-interact-with-leads-table-chromium/error-context.md
+
+
+[1A[2K[24/33] [chromium] › tests/03-leads-dashboard.spec.ts:123:7 › Lead Management › should display run information
+[1A[2K[25/33] [chromium] › tests/04-ui-responsiveness.spec.ts:7:7 › UI Responsiveness › should be responsive on mobile viewport
+[1A[2K  6) [chromium] › tests/04-ui-responsiveness.spec.ts:7:7 › UI Responsiveness › should be responsive on mobile viewport 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBe[2m([22m[32mexpected[39m[2m) // Object.is equality[22m
+
+    Expected: [32mfalse[39m
+    Received: [31mtrue[39m
+
+      16 |
+      17 |     // Some horizontal scroll might be acceptable, but should be minimal
+    > 18 |     expect(hasHorizontalScroll).toBe(false);
+         |                                 ^
+      19 |   });
+      20 |
+      21 |   test('should be responsive on tablet viewport', async ({ page }) => {
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/04-ui-responsiveness.spec.ts:18:33
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/04-ui-responsiveness-UI-Re-1162c-sponsive-on-mobile-viewport-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/04-ui-responsiveness-UI-Re-1162c-sponsive-on-mobile-viewport-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/04-ui-responsiveness-UI-Re-1162c-sponsive-on-mobile-viewport-chromium/error-context.md
+
+
+[1A[2K[26/33] [chromium] › tests/04-ui-responsiveness.spec.ts:21:7 › UI Responsiveness › should be responsive on tablet viewport
+[1A[2K[27/33] [chromium] › tests/04-ui-responsiveness.spec.ts:28:7 › UI Responsiveness › should be responsive on desktop viewport
+[1A[2K[28/33] [chromium] › tests/04-ui-responsiveness.spec.ts:37:7 › Performance & Accessibility › should load page within reasonable time
+[1A[2K[29/33] [chromium] › tests/04-ui-responsiveness.spec.ts:46:7 › Performance & Accessibility › should have proper page titles
+[1A[2K[30/33] [chromium] › tests/04-ui-responsiveness.spec.ts:54:7 › Performance & Accessibility › should not have console errors on main pages
+[1A[2K[31/33] [chromium] › tests/04-ui-responsiveness.spec.ts:78:7 › Performance & Accessibility › should have working links without 404 errors
+[1A[2K[32/33] [chromium] › tests/04-ui-responsiveness.spec.ts:100:7 › Security › should redirect unauthenticated users from protected routes
+[1A[2K  7) [chromium] › tests/04-ui-responsiveness.spec.ts:100:7 › Security › should redirect unauthenticated users from protected routes 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: page.waitForURL: Test ended.
+    =========================== logs ===========================
+    waiting for navigation to "/auth/login" until "load"
+      navigated to "http://localhost:3000/dashboard"
+    ============================================================
+
+      104 |
+      105 |     await page.goto('/dashboard');
+    > 106 |     await page.waitForURL('/auth/login');
+          |                ^
+      107 |
+      108 |     await expect(page).toHaveURL('/auth/login');
+      109 |
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/04-ui-responsiveness.spec.ts:106:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/04-ui-responsiveness-Secur-fd1bf-users-from-protected-routes-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/04-ui-responsiveness-Secur-fd1bf-users-from-protected-routes-chromium/error-context.md
+
+
+[1A[2K[33/33] [chromium] › tests/04-ui-responsiveness.spec.ts:113:7 › Security › should not expose sensitive data in page source
+[1A[2K  7 failed
+    [chromium] › tests/02-dashboard.spec.ts:7:7 › Dashboard Page › should load dashboard page ──────
+    [chromium] › tests/02-dashboard.spec.ts:22:7 › Dashboard Page › should show runs list or empty state 
+    [chromium] › tests/02-dashboard.spec.ts:32:7 › Dashboard Page › should have create run button ──
+    [chromium] › tests/02-dashboard.spec.ts:39:7 › Dashboard Page › should be able to click create run button 
+    [chromium] › tests/03-leads-dashboard.spec.ts:109:7 › Lead Management › should be able to interact with leads table 
+    [chromium] › tests/04-ui-responsiveness.spec.ts:7:7 › UI Responsiveness › should be responsive on mobile viewport 
+    [chromium] › tests/04-ui-responsiveness.spec.ts:100:7 › Security › should redirect unauthenticated users from protected routes 
+  26 passed (1.9m)

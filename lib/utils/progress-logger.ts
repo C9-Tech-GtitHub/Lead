@@ -8,6 +8,8 @@ export type ProgressEventType =
   | "scraping_started"
   | "scraping_query"
   | "scraping_suburbs"
+  | "scraping_city"
+  | "australia_wide_search"
   | "scraping_query_completed"
   | "scraping_target_reached"
   | "scraping_completed"

@@ -8,7 +8,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { logProgress } from "@/lib/utils/progress-logger";
 import { findBusinessWebsite } from "@/lib/scrapers/google-search";
 import { searchCity } from "@/lib/services/city-search";
-import { getSuburbConfig, supportsSuburbSearch } from "@/lib/config/suburbs";
+import {
+  getSuburbConfig,
+  supportsSuburbSearch,
+  getCityConfigsExcludingStates,
+  type SuburbSearchConfig,
+} from "@/lib/config/suburbs";
+import type { SuburbSearchConfig as CityConfig } from "@/lib/services/city-search";
 
 type RunDetails = {
   user_id: string;
@@ -28,7 +34,14 @@ export const processLeadRun = inngest.createFunction(
   },
   { event: "lead/run.created" },
   async ({ event, step }) => {
-    const { runId, userId, businessTypes, location, targetCount } = event.data;
+    const {
+      runId,
+      userId,
+      businessTypes,
+      location,
+      targetCount,
+      excludedStates,
+    } = event.data;
 
     // For backward compatibility, handle both businessTypes (array) and businessType (string)
     const queries =
@@ -70,8 +83,35 @@ export const processLeadRun = inngest.createFunction(
       const seenPlaceIds = new Set<string>();
       const allResults: any[] = [];
 
-      // Check if location supports multi-suburb search
-      const suburbConfig = getSuburbConfig(location);
+      // Check if this is an Australia-wide search
+      const isAustraliaWide =
+        location.toLowerCase().includes("australia") &&
+        !location.toLowerCase().includes("south australia");
+
+      // Determine which cities to search
+      let cityConfigs: SuburbSearchConfig[] = [];
+      if (isAustraliaWide) {
+        // Get all city configs, excluding specified states
+        cityConfigs = getCityConfigsExcludingStates(excludedStates || []);
+
+        await logProgress({
+          runId,
+          userId,
+          eventType: "australia_wide_search",
+          message: `Searching across ${cityConfigs.length} major cities${excludedStates && excludedStates.length > 0 ? ` (excluding ${excludedStates.join(", ")})` : ""}`,
+          details: {
+            cityCount: cityConfigs.length,
+            cities: cityConfigs.map((c) => `${c.city}, ${c.state}`),
+            excludedStates: excludedStates || [],
+          },
+        });
+      } else {
+        // Check if location supports multi-suburb search
+        const suburbConfig = getSuburbConfig(location);
+        if (suburbConfig) {
+          cityConfigs = [suburbConfig];
+        }
+      }
 
       // Calculate per-suburb limit
       const perSuburbLimit =
@@ -99,33 +139,46 @@ export const processLeadRun = inngest.createFunction(
           details: { query, queryIndex: i + 1, totalQueries: queries.length },
         });
 
-        let queryResults;
+        let queryResults: any[] = [];
 
-        if (suburbConfig) {
-          // Use city-search service for supported cities
-          console.log(
-            `[Process Run] Multi-suburb search for "${query}" in ${location}`,
-          );
+        if (cityConfigs.length > 0) {
+          // Multi-city or multi-suburb search
+          for (const cityConfig of cityConfigs) {
+            console.log(
+              `[Process Run] Multi-suburb search for "${query}" in ${cityConfig.city}`,
+            );
 
-          await logProgress({
-            runId,
-            userId,
-            eventType: "scraping_suburbs",
-            message: `Searching ${suburbConfig.suburbs.length} suburbs for "${query}"`,
-            details: {
-              query,
-              suburbCount: suburbConfig.suburbs.length,
+            await logProgress({
+              runId,
+              userId,
+              eventType: "scraping_city",
+              message: `Searching ${cityConfig.city}, ${cityConfig.state} for "${query}"`,
+              details: {
+                query,
+                city: cityConfig.city,
+                state: cityConfig.state,
+                suburbCount: cityConfig.suburbs.length,
+                perSuburbLimit,
+              },
+            });
+
+            const cityResults = await searchCity({
+              query: query,
+              config: cityConfig,
+              limit: isAustraliaWide
+                ? Math.ceil(targetCount / cityConfigs.length)
+                : targetCount, // Distribute target across cities for Australia-wide
               perSuburbLimit,
-            },
-          });
+              mode: "hybrid",
+            });
 
-          queryResults = await searchCity({
-            query: query,
-            config: suburbConfig,
-            limit: targetCount, // Allow each query to find up to target
-            perSuburbLimit,
-            mode: "hybrid",
-          });
+            queryResults.push(...cityResults);
+
+            // For Australia-wide searches, check if we have enough results
+            if (isAustraliaWide && allResults.length >= targetCount) {
+              break;
+            }
+          }
         } else {
           // Fall back to regular single-location search
           console.log(

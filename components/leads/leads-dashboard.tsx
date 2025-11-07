@@ -1205,13 +1205,18 @@ export function LeadsDashboard({
       {!isLoading && (
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-900">
-                <tr>
-                  <th className="w-12 px-4 py-3"></th>
+            <table
+              className="min-w-full divide-y divide-gray-200 dark:divide-gray-700"
+              role="table"
+              aria-label="Leads table"
+            >
+              <thead className="bg-gray-50 dark:bg-gray-900" role="rowgroup">
+                <tr role="row">
+                  <th className="w-12 px-4 py-3" role="columnheader"></th>
                   <th
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
                     onClick={() => handleSort("name")}
+                    role="columnheader"
                   >
                     <div className="flex items-center gap-1">
                       Company
@@ -1222,15 +1227,22 @@ export function LeadsDashboard({
                       )}
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    role="columnheader"
+                  >
                     Location
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    role="columnheader"
+                  >
                     Industry
                   </th>
                   <th
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
                     onClick={() => handleSort("grade")}
+                    role="columnheader"
                   >
                     <div className="flex items-center gap-1">
                       Grade
@@ -1241,15 +1253,22 @@ export function LeadsDashboard({
                       )}
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    role="columnheader"
+                  >
                     Emails
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    role="columnheader"
+                  >
                     Email Status
                   </th>
                   <th
                     className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 select-none"
                     onClick={() => handleSort("last_sent")}
+                    role="columnheader"
                   >
                     <div className="flex items-center gap-1">
                       Last Sent
@@ -1260,19 +1279,29 @@ export function LeadsDashboard({
                       )}
                     </div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    role="columnheader"
+                  >
                     Status
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  <th
+                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+                    role="columnheader"
+                  >
                     Run
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody
+                className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700"
+                role="rowgroup"
+              >
                 {leads.map((lead) => (
                   <tr
                     key={lead.id}
                     className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${selectedLeads.has(lead.id) ? "bg-blue-50 dark:bg-blue-900" : ""}`}
+                    role="row"
                   >
                     <td className="px-4 py-3">
                       <input

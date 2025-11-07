@@ -572,7 +572,9 @@ export function RunsList({ initialRuns }: RunsListProps) {
   if (runs.length === 0) {
     return (
       <div className="text-center py-12 bg-white rounded-lg shadow">
-        <p className="text-gray-500 mb-4">No research runs yet</p>
+        <p className="text-gray-500 mb-4">
+          No runs yet. Create your first run to get started!
+        </p>
         <p className="text-sm text-gray-400">
           Create your first run to start finding leads
         </p>
@@ -585,7 +587,8 @@ export function RunsList({ initialRuns }: RunsListProps) {
       {runs.map((run) => (
         <div
           key={run.id}
-          className="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-6"
+          className="bg-white rounded-lg shadow hover:shadow-md transition-shadow p-6 run-item"
+          data-testid="run"
         >
           <div className="flex justify-between items-start mb-4">
             {editingRun === run.id ? (

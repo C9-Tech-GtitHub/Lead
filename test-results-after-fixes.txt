@@ -1,0 +1,126 @@
+
+> lead-research@0.1.0 test
+> playwright test
+
+
+Running 33 tests using 1 worker
+
+[1A[2K[1/33] [setup] › tests/auth.setup.ts:5:6 › authenticate
+[1A[2K[2/33] [chromium] › tests/01-authentication.spec.ts:4:7 › Authentication Flow › should load login page
+[1A[2K[3/33] [chromium] › tests/01-authentication.spec.ts:14:7 › Authentication Flow › should show validation for empty fields
+[1A[2K[4/33] [chromium] › tests/01-authentication.spec.ts:26:7 › Authentication Flow › should show error for invalid credentials
+[1A[2K[5/33] [chromium] › tests/01-authentication.spec.ts:37:7 › Authentication Flow › should login successfully with valid credentials
+[1A[2K[6/33] [chromium] › tests/01-authentication.spec.ts:51:7 › Authentication Flow › should have link to signup page
+[1A[2K[7/33] [chromium] › tests/01-authentication.spec.ts:59:7 › Authentication Flow › should redirect to login when accessing protected route without auth
+[1A[2K[8/33] [chromium] › tests/02-dashboard.spec.ts:7:7 › Dashboard Page › should load dashboard page
+[1A[2K[9/33] [chromium] › tests/02-dashboard.spec.ts:14:7 › Dashboard Page › should display dashboard header with navigation
+[1A[2K[10/33] [chromium] › tests/02-dashboard.spec.ts:24:7 › Dashboard Page › should show runs list or empty state
+[1A[2K[11/33] [chromium] › tests/02-dashboard.spec.ts:41:7 › Dashboard Page › should have create run button
+[1A[2K[12/33] [chromium] › tests/02-dashboard.spec.ts:50:7 › Dashboard Page › should be able to click create run button
+[1A[2K[13/33] [chromium] › tests/02-dashboard.spec.ts:65:7 › Navigation › should navigate to map page
+[1A[2K[14/33] [chromium] › tests/02-dashboard.spec.ts:78:7 › Navigation › should be able to navigate between pages
+[1A[2K[15/33] [chromium] › tests/03-leads-dashboard.spec.ts:7:7 › Leads Dashboard › should load home/leads dashboard page
+[1A[2K[16/33] [chromium] › tests/03-leads-dashboard.spec.ts:14:7 › Leads Dashboard › should display total lead count
+[1A[2K[17/33] [chromium] › tests/03-leads-dashboard.spec.ts:22:7 › Leads Dashboard › should display status counts
+[1A[2K[18/33] [chromium] › tests/03-leads-dashboard.spec.ts:37:7 › Leads Dashboard › should display runs list
+[1A[2K[19/33] [chromium] › tests/03-leads-dashboard.spec.ts:50:7 › Leads Dashboard › should have filter/search functionality
+[1A[2K[chromium] › tests/03-leads-dashboard.spec.ts:50:7 › Leads Dashboard › should have filter/search functionality
+Filter/search inputs found: [33m1[39m
+
+[1A[2K[20/33] [chromium] › tests/03-leads-dashboard.spec.ts:64:7 › Leads Dashboard › should have export functionality
+[1A[2K[21/33] [chromium] › tests/03-leads-dashboard.spec.ts:78:7 › Leads Dashboard › should display lead status options
+[1A[2K[22/33] [chromium] › tests/03-leads-dashboard.spec.ts:102:7 › Leads Dashboard › should load without JavaScript errors
+[1A[2K[23/33] [chromium] › tests/03-leads-dashboard.spec.ts:125:7 › Lead Management › should be able to interact with leads table
+[1A[2K  1) [chromium] › tests/03-leads-dashboard.spec.ts:125:7 › Lead Management › should be able to interact with leads table 
+
+    Error: page.waitForSelector: Unexpected token "=" while parsing css selector "table[role="table"], text=Loading leads...". Did you mean to CSS.escape it?
+    Call log:
+    [2m  - waiting for table[role="table"], text=Loading leads... to be visible[22m
+
+
+      131 |     // Wait for either table to appear or loading spinner to disappear
+      132 |     // The component shows a loading spinner initially, then renders the table
+    > 133 |     await page.waitForSelector('table[role="table"], text=Loading leads...', {
+          |                ^
+      134 |       timeout: 10000,
+      135 |     });
+      136 |
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/03-leads-dashboard.spec.ts:133:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/03-leads-dashboard-Lead-Ma-f6c11-o-interact-with-leads-table-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/03-leads-dashboard-Lead-Ma-f6c11-o-interact-with-leads-table-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/03-leads-dashboard-Lead-Ma-f6c11-o-interact-with-leads-table-chromium/error-context.md
+
+
+[1A[2K[24/33] [chromium] › tests/03-leads-dashboard.spec.ts:148:7 › Lead Management › should display run information
+[1A[2K[25/33] [chromium] › tests/04-ui-responsiveness.spec.ts:7:7 › UI Responsiveness › should be responsive on mobile viewport
+[1A[2K  2) [chromium] › tests/04-ui-responsiveness.spec.ts:7:7 › UI Responsiveness › should be responsive on mobile viewport 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThan[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: < [32m20[39m
+    Received:   [31m84[39m
+
+      24 |     // Allow up to 20px of overflow for minor rendering differences
+      25 |     // This accounts for scrollbars, browser differences, etc.
+    > 26 |     expect(scrollInfo.overflow).toBeLessThan(20);
+         |                                 ^
+      27 |   });
+      28 |
+      29 |   test("should be responsive on tablet viewport", async ({ page }) => {
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/04-ui-responsiveness.spec.ts:26:33
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/04-ui-responsiveness-UI-Re-1162c-sponsive-on-mobile-viewport-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/04-ui-responsiveness-UI-Re-1162c-sponsive-on-mobile-viewport-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/04-ui-responsiveness-UI-Re-1162c-sponsive-on-mobile-viewport-chromium/error-context.md
+
+
+[1A[2K[26/33] [chromium] › tests/04-ui-responsiveness.spec.ts:29:7 › UI Responsiveness › should be responsive on tablet viewport
+[1A[2K[27/33] [chromium] › tests/04-ui-responsiveness.spec.ts:36:7 › UI Responsiveness › should be responsive on desktop viewport
+[1A[2K[28/33] [chromium] › tests/04-ui-responsiveness.spec.ts:45:7 › Performance & Accessibility › should load page within reasonable time
+[1A[2K[29/33] [chromium] › tests/04-ui-responsiveness.spec.ts:54:7 › Performance & Accessibility › should have proper page titles
+[1A[2K[30/33] [chromium] › tests/04-ui-responsiveness.spec.ts:62:7 › Performance & Accessibility › should not have console errors on main pages
+[1A[2K[31/33] [chromium] › tests/04-ui-responsiveness.spec.ts:87:7 › Performance & Accessibility › should have working links without 404 errors
+[1A[2K[32/33] [chromium] › tests/04-ui-responsiveness.spec.ts:109:7 › Security › should redirect unauthenticated users from protected routes
+[1A[2K  3) [chromium] › tests/04-ui-responsiveness.spec.ts:109:7 › Security › should redirect unauthenticated users from protected routes 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      132 |
+      133 |       // Either we're on the login page OR we see a login form
+    > 134 |       expect(currentUrl.includes("/auth/login") || hasLoginForm).toBeTruthy();
+          |                                                                  ^
+      135 |     }
+      136 |
+      137 |     await context.close();
+        at /Users/merrickallen/Documents/GitHub/Lead/tests/04-ui-responsiveness.spec.ts:134:66
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/04-ui-responsiveness-Secur-fd1bf-users-from-protected-routes-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/04-ui-responsiveness-Secur-fd1bf-users-from-protected-routes-chromium/error-context.md
+
+
+[1A[2K[33/33] [chromium] › tests/04-ui-responsiveness.spec.ts:140:7 › Security › should not expose sensitive data in page source
+[1A[2K  3 failed
+    [chromium] › tests/03-leads-dashboard.spec.ts:125:7 › Lead Management › should be able to interact with leads table 
+    [chromium] › tests/04-ui-responsiveness.spec.ts:7:7 › UI Responsiveness › should be responsive on mobile viewport 
+    [chromium] › tests/04-ui-responsiveness.spec.ts:109:7 › Security › should redirect unauthenticated users from protected routes 
+  30 passed (51.8s)
+
+[36m  Serving HTML report at http://localhost:62638. Press Ctrl+C to quit.[39m

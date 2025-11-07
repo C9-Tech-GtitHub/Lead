@@ -35,6 +35,9 @@ export function CreateRunModal({
   ]);
   const [customPrompt, setCustomPrompt] = useState("");
 
+  // Australia-wide search configuration
+  const [excludedStates, setExcludedStates] = useState<string[]>([]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -64,6 +67,7 @@ export function CreateRunModal({
           businessSizes: businessSize,
           customPrompt: customPrompt.trim() || undefined,
         },
+        excludedStates: excludedStates.length > 0 ? excludedStates : undefined,
       });
 
       // Close modal - real-time subscription will handle the update
@@ -135,7 +139,17 @@ export function CreateRunModal({
             </label>
 
             {/* Quick Select Buttons for Test Cities */}
-            <div className="mb-2 flex gap-2">
+            <div className="mb-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setLocation("Australia");
+                  setExcludedStates([]);
+                }}
+                className="px-3 py-1 text-xs font-medium bg-green-50 text-green-700 border border-green-200 rounded hover:bg-green-100 transition-colors"
+              >
+                🇦🇺 All Australia
+              </button>
               <button
                 type="button"
                 onClick={() => setLocation("Sydney")}
@@ -159,11 +173,59 @@ export function CreateRunModal({
               value={location}
               onChange={(e) => setLocation(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
-              placeholder="e.g., Melbourne, Sydney, Brisbane"
+              placeholder="e.g., Melbourne, Sydney, Brisbane, or Australia"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Use Sydney or Melbourne for multi-suburb search
+              Use city names for targeted search, or &quot;Australia&quot; for
+              nationwide
             </p>
+
+            {/* State Exclusion for Australia-wide searches */}
+            {location.toLowerCase().includes("australia") &&
+              !location.toLowerCase().includes("south australia") && (
+                <div className="mt-3 p-3 bg-gray-50 rounded-md border border-gray-200">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Exclude States (Optional)
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { code: "NSW", name: "New South Wales" },
+                      { code: "VIC", name: "Victoria" },
+                      { code: "QLD", name: "Queensland" },
+                      { code: "WA", name: "Western Australia" },
+                      { code: "SA", name: "South Australia" },
+                      { code: "ACT", name: "ACT" },
+                      { code: "TAS", name: "Tasmania" },
+                    ].map((state) => (
+                      <label key={state.code} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={excludedStates.includes(state.code)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setExcludedStates([
+                                ...excludedStates,
+                                state.code,
+                              ]);
+                            } else {
+                              setExcludedStates(
+                                excludedStates.filter((s) => s !== state.code),
+                              );
+                            }
+                          }}
+                          className="h-4 w-4 text-red-600 border-gray-300 rounded focus:ring-red-500"
+                        />
+                        <span className="ml-2 text-sm text-gray-700">
+                          {state.code}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-gray-500">
+                    Check states to exclude them from the search
+                  </p>
+                </div>
+              )}
           </div>
 
           <div>
@@ -192,8 +254,10 @@ export function CreateRunModal({
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-gray-900"
             />
             <p className="mt-1 text-xs text-gray-500">
-              Between 5 and 2000 leads — use the upper range for major metros
-              when the multi-suburb search is enabled.
+              {location.toLowerCase().includes("australia") &&
+              !location.toLowerCase().includes("south australia")
+                ? "Between 5 and 2000 leads — distributed across major cities in each state"
+                : "Between 5 and 2000 leads — use the upper range for major metros when the multi-suburb search is enabled"}
             </p>
           </div>
 

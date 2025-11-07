@@ -15,6 +15,7 @@ interface CreateRunParams {
   location: string;
   targetCount: number;
   prescreenConfig?: PrescreenConfig;
+  excludedStates?: string[];
 }
 
 export async function createRun({
@@ -22,6 +23,7 @@ export async function createRun({
   location,
   targetCount,
   prescreenConfig,
+  excludedStates,
 }: CreateRunParams) {
   try {
     const supabase = await createClient();
@@ -71,6 +73,7 @@ export async function createRun({
         target_count: sanitizedTargetCount,
         status: "pending",
         prescreen_config: finalPrescreenConfig,
+        excluded_states: excludedStates || null,
       })
       .select()
       .single();
@@ -96,6 +99,7 @@ export async function createRun({
           businessTypes,
           location,
           targetCount: sanitizedTargetCount,
+          excludedStates: excludedStates || null,
         },
       });
       console.log("[createRun] Inngest event sent:", eventResult);
