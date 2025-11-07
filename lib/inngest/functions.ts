@@ -14,7 +14,6 @@ import {
   getCityConfigsExcludingStates,
   type SuburbSearchConfig,
 } from "@/lib/config/suburbs";
-import type { SuburbSearchConfig as CityConfig } from "@/lib/services/city-search";
 
 type RunDetails = {
   user_id: string;

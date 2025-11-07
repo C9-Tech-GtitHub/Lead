@@ -62,19 +62,26 @@ export async function createRun({
     const finalPrescreenConfig = prescreenConfig || defaultPrescreenConfig;
 
     // Create the run in the database
+    // Note: excluded_states requires migration to be applied first
+    const insertData: any = {
+      user_id: user.id,
+      business_type: businessTypeDisplay, // Display string for UI
+      business_types: businessTypes, // Array for search logic
+      queries_count: businessTypes.length,
+      location: location,
+      target_count: sanitizedTargetCount,
+      status: "pending",
+      prescreen_config: finalPrescreenConfig,
+    };
+
+    // Only add excluded_states if the column exists (after migration)
+    if (excludedStates && excludedStates.length > 0) {
+      insertData.excluded_states = excludedStates;
+    }
+
     const { data: run, error: createError } = await supabase
       .from("runs")
-      .insert({
-        user_id: user.id,
-        business_type: businessTypeDisplay, // Display string for UI
-        business_types: businessTypes, // Array for search logic
-        queries_count: businessTypes.length,
-        location: location,
-        target_count: sanitizedTargetCount,
-        status: "pending",
-        prescreen_config: finalPrescreenConfig,
-        excluded_states: excludedStates || null,
-      })
+      .insert(insertData)
       .select()
       .single();
 

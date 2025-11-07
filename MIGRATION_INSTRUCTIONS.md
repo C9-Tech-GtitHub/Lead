@@ -1,63 +1,108 @@
-# Database Migration: Add research_depth Column
+# Database Migration Instructions
 
-## Quick Fix to Get Lightweight Research Working
+## Australia-Wide Search Feature Migration
 
-Run this SQL in your **Supabase SQL Editor** (Dashboard → SQL Editor → New Query):
+To enable the full Australia-wide search functionality with state exclusion, you need to apply the database migration that adds the `excluded_states` column to the `runs` table.
 
-```sql
--- Add research_depth column to leads table
-ALTER TABLE leads 
-ADD COLUMN IF NOT EXISTS research_depth TEXT 
-CHECK (research_depth IN ('none', 'lightweight', 'deep')) 
-DEFAULT 'none';
+### ⚠️ Current Status
 
--- Add index for filtering by research depth
-CREATE INDEX IF NOT EXISTS idx_leads_research_depth ON leads(research_depth);
+**The feature will work in limited mode without the migration:**
+- ✅ UI will show the "All Australia" button and state exclusion checkboxes
+- ✅ Backend will accept the excluded states parameter
+- ✅ Searches will work but **state exclusion will be ignored**
+- ❌ Excluded states will not be saved to the database
+- ❌ State exclusion filtering will not work until migration is applied
 
--- Update existing completed leads to 'deep' (they used the old deep research method)
-UPDATE leads 
-SET research_depth = 'deep' 
-WHERE research_status = 'completed' AND (research_depth IS NULL OR research_depth = 'none');
-```
+### Option 1: Apply via Supabase Dashboard (Recommended)
 
-## Verify It Worked
-
-After running the SQL, check that the column exists:
+1. Go to your Supabase project dashboard
+2. Navigate to **SQL Editor**
+3. Create a new query
+4. Copy and paste the following SQL:
 
 ```sql
-SELECT column_name, data_type, is_nullable 
-FROM information_schema.columns 
-WHERE table_name = 'leads' AND column_name = 'research_depth';
+-- Add excluded_states field to runs table for Australia-wide searches
+-- This allows users to search "All Australia" while excluding specific states (e.g., everything but VIC)
+
+ALTER TABLE runs
+ADD COLUMN IF NOT EXISTS excluded_states TEXT[] DEFAULT NULL;
+
+COMMENT ON COLUMN runs.excluded_states IS 'Array of state codes (NSW, VIC, QLD, WA, SA, ACT, TAS) to exclude from Australia-wide searches';
 ```
 
-You should see:
-- column_name: `research_depth`
-- data_type: `text`
-- is_nullable: `YES`
+5. Click **Run** to execute the migration
 
-## Then Restart Your Dev Server
+### Option 2: Apply via psql Command Line
+
+If you have direct database access:
 
 ```bash
-# Stop the current dev server (Ctrl+C)
-# Then restart:
-npm run dev
+psql $DATABASE_URL < supabase/migrations/add_excluded_states_to_runs.sql
 ```
 
-Now lightweight research should work! 🎉
+Or connect to your database and run:
 
----
+```bash
+psql $DATABASE_URL
+```
 
-## What This Does
+Then paste the SQL from the migration file.
 
-1. **Adds `research_depth` column** - Tracks whether a lead was researched with:
-   - `'none'` - Not researched yet
-   - `'lightweight'` - Fast analysis without web search (~1,500 tokens)
-   - `'deep'` - Comprehensive analysis with web search (~27,000 tokens)
+### Option 3: Apply via Supabase CLI
 
-2. **Creates an index** - Improves query performance when filtering by research depth
+If you're using Supabase local development:
 
-3. **Updates existing leads** - Marks all previously completed leads as "deep" since they used the old comprehensive research method
+```bash
+supabase db push
+```
 
-## Why The Migration Failed
+Or manually:
 
-The TypeScript migration runner couldn't execute multi-statement SQL properly due to Supabase's RPC limitations. Running it directly in the SQL Editor works perfectly.
+```bash
+supabase migration up
+```
+
+### Verification
+
+After applying the migration, verify it worked:
+
+```sql
+-- Check if the column exists
+SELECT column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_name = 'runs' AND column_name = 'excluded_states';
+```
+
+Expected output:
+```
+column_name     | data_type | is_nullable
+----------------+-----------+-------------
+excluded_states | ARRAY     | YES
+```
+
+### Testing the Feature
+
+Once the migration is applied:
+
+1. Create a new lead run
+2. Click "🇦🇺 All Australia"
+3. Check one or more states to exclude (e.g., VIC)
+4. Submit the run
+5. Verify in the database that `excluded_states` column contains the excluded state codes
+
+### Rollback (if needed)
+
+To remove the column:
+
+```sql
+ALTER TABLE runs DROP COLUMN IF EXISTS excluded_states;
+```
+
+⚠️ **Warning**: This will delete all saved state exclusion data.
+
+### Migration File Location
+
+The migration file is located at:
+```
+supabase/migrations/add_excluded_states_to_runs.sql
+```
