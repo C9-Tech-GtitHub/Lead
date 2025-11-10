@@ -104,11 +104,11 @@ If no emails found, return empty emails array with summary of why.`;
     try {
       response = await openai.responses.create({
         model: "gpt-5-mini",
-        reasoning: { effort: "minimal" }, // Minimal reasoning for cost savings (~30% reduction)
+        reasoning: { effort: "minimal" as any }, // Minimal reasoning for cost savings (~30% reduction) - Type assertion for SDK compatibility
         max_output_tokens: 6000, // Reduced from 8000 for cost optimization
         tools: [
           {
-            type: "web_search", // Updated from web_search_preview (deprecated for GPT-5)
+            type: "web_search" as any, // Updated from web_search_preview (deprecated for GPT-5) - Type assertion for SDK compatibility
           },
         ],
         tool_choice: "auto", // Let it decide when to use web search
