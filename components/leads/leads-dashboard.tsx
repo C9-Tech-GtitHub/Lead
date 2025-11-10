@@ -7,6 +7,7 @@ import { LeadDetailModal } from "../runs/lead-detail-modal";
 import BulkEmailFinderModal from "./bulk-email-finder-modal";
 import SendGridCheckModal from "./sendgrid-check-modal";
 import ReviewLeadsModal from "./review-leads-modal";
+import { MultiSelect } from "../ui/multi-select";
 
 interface Lead {
   id: string;
@@ -113,10 +114,10 @@ export function LeadsDashboard({
   const [emailCounts, setEmailCounts] = useState<Record<string, number>>({});
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [gradeFilter, setGradeFilter] = useState<string>("all");
+  const [gradeFilter, setGradeFilter] = useState<string[]>([]);
   const [gradeRangeFilter, setGradeRangeFilter] = useState<string>("all");
   const [runFilter, setRunFilter] = useState<string>("all");
-  const [emailStatusFilter, setEmailStatusFilter] = useState<string>("all");
+  const [emailStatusFilter, setEmailStatusFilter] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [emailTypeFilter, setEmailTypeFilter] = useState<string>("all");
   const [emailEligibilityFilter, setEmailEligibilityFilter] =
@@ -172,10 +173,10 @@ export function LeadsDashboard({
         page: currentPage.toString(),
         pageSize: pageSize.toString(),
         status: statusFilter,
-        grade: gradeFilter,
+        grade: gradeFilter.join(","),
         gradeRange: gradeRangeFilter,
         run: runFilterValue,
-        emailStatus: emailStatusFilter,
+        emailStatus: emailStatusFilter.join(","),
         search: searchQuery,
         emailType: emailTypeFilter,
         emailEligibility: emailEligibilityFilter,
@@ -393,10 +394,10 @@ export function LeadsDashboard({
       // Use lightweight IDs endpoint
       const params = new URLSearchParams({
         status: statusFilter,
-        grade: gradeFilter,
+        grade: gradeFilter.join(","),
         gradeRange: gradeRangeFilter,
         run: runFilterValue,
-        emailStatus: emailStatusFilter,
+        emailStatus: emailStatusFilter.join(","),
         search: searchQuery,
         aiSearchedNoEmails: aiSearchedNoEmails,
         limit: "10000",
@@ -555,14 +556,14 @@ export function LeadsDashboard({
         if (statusFilter !== "all") {
           query = query.eq("lead_status", statusFilter);
         }
-        if (gradeFilter !== "all") {
-          query = query.eq("compatibility_grade", gradeFilter);
+        if (gradeFilter.length > 0) {
+          query = query.in("compatibility_grade", gradeFilter);
         }
         if (runFilter !== "all") {
           query = query.eq("run_id", runFilter);
         }
-        if (emailStatusFilter !== "all") {
-          query = query.eq("email_status", emailStatusFilter);
+        if (emailStatusFilter.length > 0) {
+          query = query.in("email_status", emailStatusFilter);
         }
 
         const { data } = await query;
@@ -640,14 +641,14 @@ export function LeadsDashboard({
         if (statusFilter !== "all") {
           query = query.eq("lead_status", statusFilter);
         }
-        if (gradeFilter !== "all") {
-          query = query.eq("compatibility_grade", gradeFilter);
+        if (gradeFilter.length > 0) {
+          query = query.in("compatibility_grade", gradeFilter);
         }
         if (runFilter !== "all") {
           query = query.eq("run_id", runFilter);
         }
-        if (emailStatusFilter !== "all") {
-          query = query.eq("email_status", emailStatusFilter);
+        if (emailStatusFilter.length > 0) {
+          query = query.in("email_status", emailStatusFilter);
         }
 
         const { data } = await query;
@@ -776,8 +777,8 @@ export function LeadsDashboard({
           <button
             onClick={() => {
               setStatusFilter("all");
-              setGradeFilter("all");
-              setEmailStatusFilter("valid");
+              setGradeFilter([]);
+              setEmailStatusFilter(["valid"]);
               setEmailTypeFilter("personal");
               setEmailEligibilityFilter("eligible");
               setRunFilter("all");
@@ -791,7 +792,7 @@ export function LeadsDashboard({
               setStatusFilter("new");
               setEmailEligibilityFilter("eligible");
               setEmailTypeFilter("personal");
-              setEmailStatusFilter("all");
+              setEmailStatusFilter([]);
             }}
             className="px-3 py-1 bg-emerald-600 dark:bg-emerald-700 text-white rounded text-xs font-medium hover:bg-emerald-700 dark:hover:bg-emerald-600"
             title="Has emails, never contacted, not suppressed, not on hold"
@@ -801,7 +802,7 @@ export function LeadsDashboard({
 
           <button
             onClick={() => {
-              setGradeFilter("all");
+              setGradeFilter([]);
               setGradeRangeFilter("A-B");
             }}
             className="px-3 py-1 bg-yellow-600 dark:bg-yellow-700 text-white rounded text-xs font-medium hover:bg-yellow-700 dark:hover:bg-yellow-600"
@@ -821,10 +822,10 @@ export function LeadsDashboard({
           <button
             onClick={() => {
               setStatusFilter("all");
-              setGradeFilter("all");
+              setGradeFilter([]);
               setGradeRangeFilter("all");
               setRunFilter("all");
-              setEmailStatusFilter("all");
+              setEmailStatusFilter([]);
               setSearchQuery("");
               setEmailTypeFilter("all");
               setEmailEligibilityFilter("all");
@@ -967,37 +968,39 @@ export function LeadsDashboard({
               <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                 Grade:
               </label>
-              <select
-                value={gradeFilter}
-                onChange={(e) => setGradeFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium"
-              >
-                <option value="all">All Grades</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-                <option value="F">F</option>
-              </select>
+              <MultiSelect
+                options={[
+                  { value: "A", label: "A" },
+                  { value: "B", label: "B" },
+                  { value: "C", label: "C" },
+                  { value: "D", label: "D" },
+                  { value: "F", label: "F" },
+                ]}
+                selected={gradeFilter}
+                onChange={setGradeFilter}
+                placeholder="All Grades"
+                className="min-w-[200px]"
+              />
             </div>
 
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium text-gray-900 dark:text-gray-100">
                 Email Status:
               </label>
-              <select
-                value={emailStatusFilter}
-                onChange={(e) => setEmailStatusFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 font-medium"
-              >
-                <option value="all">All Email Statuses</option>
-                <option value="unknown">Unknown</option>
-                <option value="valid">Valid</option>
-                <option value="suppressed">Suppressed</option>
-                <option value="bounced">Bounced</option>
-                <option value="unsubscribed">Unsubscribed</option>
-                <option value="invalid">Invalid</option>
-              </select>
+              <MultiSelect
+                options={[
+                  { value: "unknown", label: "Unknown" },
+                  { value: "valid", label: "Valid" },
+                  { value: "suppressed", label: "Suppressed" },
+                  { value: "bounced", label: "Bounced" },
+                  { value: "unsubscribed", label: "Unsubscribed" },
+                  { value: "invalid", label: "Invalid" },
+                ]}
+                selected={emailStatusFilter}
+                onChange={setEmailStatusFilter}
+                placeholder="All Email Statuses"
+                className="min-w-[200px]"
+              />
             </div>
 
             <div className="flex items-center gap-2">
@@ -1032,9 +1035,9 @@ export function LeadsDashboard({
 
             {(runFilter !== "all" ||
               statusFilter !== "all" ||
-              gradeFilter !== "all" ||
+              gradeFilter.length > 0 ||
               gradeRangeFilter !== "all" ||
-              emailStatusFilter !== "all" ||
+              emailStatusFilter.length > 0 ||
               emailTypeFilter !== "all" ||
               emailEligibilityFilter !== "all" ||
               aiSearchedNoEmails !== "all") && (
@@ -1042,9 +1045,9 @@ export function LeadsDashboard({
                 onClick={() => {
                   setRunFilter("all");
                   setStatusFilter("all");
-                  setGradeFilter("all");
+                  setGradeFilter([]);
                   setGradeRangeFilter("all");
-                  setEmailStatusFilter("all");
+                  setEmailStatusFilter([]);
                   setEmailTypeFilter("all");
                   setEmailEligibilityFilter("all");
                   setAiSearchedNoEmails("all");

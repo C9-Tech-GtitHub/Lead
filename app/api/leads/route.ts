@@ -21,10 +21,16 @@ export async function GET(request: NextRequest) {
     500,
   ); // Cap at 500
   const statusFilter = searchParams.get("status") || "all";
-  const gradeFilter = searchParams.get("grade") || "all";
+  const gradeFilterParam = searchParams.get("grade") || "";
+  const gradeFilter = gradeFilterParam
+    ? gradeFilterParam.split(",").filter(Boolean)
+    : [];
   const gradeRangeFilter = searchParams.get("gradeRange") || "all";
   const runFilter = searchParams.get("run") || "all";
-  const emailStatusFilter = searchParams.get("emailStatus") || "all";
+  const emailStatusFilterParam = searchParams.get("emailStatus") || "";
+  const emailStatusFilter = emailStatusFilterParam
+    ? emailStatusFilterParam.split(",").filter(Boolean)
+    : [];
   const searchQuery = searchParams.get("search") || "";
   const emailTypeFilter = searchParams.get("emailType") || "all";
   const emailEligibilityFilter = searchParams.get("emailEligibility") || "all";
@@ -43,8 +49,8 @@ export async function GET(request: NextRequest) {
       baseQuery = baseQuery.eq("lead_status", statusFilter);
     }
 
-    if (gradeFilter !== "all") {
-      baseQuery = baseQuery.eq("compatibility_grade", gradeFilter);
+    if (gradeFilter.length > 0) {
+      baseQuery = baseQuery.in("compatibility_grade", gradeFilter);
     }
 
     if (gradeRangeFilter !== "all") {
@@ -62,8 +68,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (emailStatusFilter !== "all") {
-      baseQuery = baseQuery.eq("email_status", emailStatusFilter);
+    if (emailStatusFilter.length > 0) {
+      baseQuery = baseQuery.in("email_status", emailStatusFilter);
     }
 
     if (searchQuery) {
